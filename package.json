@@ -1,0 +1,26 @@
+{
+  "name": "procscope",
+  "version": "0.1.1",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "procscope": "src/index.tsx"
+  },
+  "scripts": {
+    "dev": "tsx src/index.tsx",
+    "start": "tsx src/index.tsx"
+  },
+  "dependencies": {
+    "ink": "^5.1.0",
+    "ink-text-input": "^6.0.0",
+    "is-root": "^3.0.0",
+    "ps-list": "^8.1.1",
+    "react": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.7",
+    "@types/react": "^18.2.8",
+    "tsx": "^4.16.2",
+    "typescript": "^5.9.2"
+  }
+}
