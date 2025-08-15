@@ -58,7 +58,13 @@ export interface NetworkStats {
 export const SUSPICIOUS_PATTERNS = {
   keyloggers: [
     'keylog', 'keystroke', 'keypress', 'keycapture', 'inputmonitor',
-    'keywatcher', 'keyspy', 'keyrecord', 'keytrack'
+    'keywatcher', 'keyspy', 'keyrecord', 'keytrack', 'keyboardspy',
+    'inputcapture', 'inputrecord', 'inputlog', 'inputspy', 'eventlog',
+    'tapkey', 'keytap', 'inputtap', 'eventtap', 'cgeventtap',
+    'inputhook', 'keyhook', 'globalhook', 'systemhook',
+    // Common spyware/RAT names
+    'spytector', 'refog', 'ardamax', 'actual', 'elite', 'ghostpress',
+    'perfect', 'invisible', 'family', 'employee', 'computer', 'monitoring'
   ],
   screenRecorders: [
     'screencapture', 'screenrecord', 'screengrab', 'screenshot',

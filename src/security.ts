@@ -12,6 +12,86 @@ export async function analyzeSecurity(
   const reasons: string[] = [];
   let level: SuspicionLevel = 'LOW';
 
+  // CRITICAL: Keylogger with network activity (data exfiltration)
+  const isKeylogger = SUSPICIOUS_PATTERNS.keyloggers.some(pattern => 
+    (proc.name || '').toLowerCase().includes(pattern) ||
+    (proc.cmd || '').toLowerCase().includes(pattern) ||
+    (proc.execPath || '').toLowerCase().includes(pattern)
+  );
+  
+  if (isKeylogger) {
+    if (conn && conn.outbound > 0) {
+      reasons.push('keylogger-with-network-activity');
+      level = 'CRITICAL';
+    } else {
+      reasons.push('keylogger-pattern');
+      level = 'HIGH';
+    }
+  }
+
+  // CRITICAL: Input monitoring processes with suspicious network behavior
+  const inputMonitoringApis = [
+    'CGEventTap', 'IOHIDManager', 'NSEvent', 'kIOHIDElement',
+    'eventtap', 'inputmethod', 'accessibility'
+  ];
+  
+  const hasInputMonitoring = inputMonitoringApis.some(api => 
+    (proc.cmd || '').includes(api) || (proc.execPath || '').includes(api)
+  );
+  
+  if (hasInputMonitoring && conn && conn.outbound > 2) {
+    reasons.push('input-monitoring-with-network');
+    level = 'CRITICAL';
+  }
+
+  // HIGH: Processes with suspicious data upload patterns
+  if (conn && conn.outbound > 10 && conn.sampleRemotes.size > 5) {
+    const suspiciousRemotes = Array.from(conn.sampleRemotes).some(remote => {
+      // Check for suspicious domains/IPs
+      return !remote.includes('apple.com') && 
+             !remote.includes('icloud.com') &&
+             !remote.includes('localhost') &&
+             !remote.includes('127.0.0.1') &&
+             (remote.includes('.ru') || remote.includes('.cn') || 
+              remote.includes('.tk') || remote.includes('.onion') ||
+              /\d+\.\d+\.\d+\.\d+/.test(remote)); // Raw IP addresses
+    });
+    
+    if (suspiciousRemotes) {
+      reasons.push('suspicious-data-upload-pattern');
+      if (level !== 'CRITICAL') level = 'HIGH';
+    }
+  }
+
+  // CRITICAL: Unsigned binary with input monitoring capabilities
+  if (hasInputMonitoring && csig && !csig.signed) {
+    reasons.push('unsigned-input-monitor');
+    level = 'CRITICAL';
+  }
+
+  // HIGH: Processes spawned from browsers/documents that monitor input
+  if (hasInputMonitoring && parentProc) {
+    const suspiciousParents = ['safari', 'chrome', 'firefox', 'edge', 'word', 'excel', 'powerpoint', 'preview'];
+    const isSuspiciousParent = suspiciousParents.some(parent => 
+      (parentProc.name || '').toLowerCase().includes(parent)
+    );
+    
+    if (isSuspiciousParent) {
+      reasons.push('browser-spawned-input-monitor');
+      if (level !== 'CRITICAL') level = 'HIGH';
+    }
+  }
+
+  // CRITICAL: Processes with accessibility permissions making network connections
+  const hasAccessibilityAccess = (proc.cmd || '').includes('accessibility') || 
+                                 (proc.execPath || '').includes('accessibility') ||
+                                 launchd?.includes('accessibility');
+  
+  if (hasAccessibilityAccess && conn && conn.outbound > 1) {
+    reasons.push('accessibility-with-network');
+    level = 'CRITICAL';
+  }
+
   // Check for different user
   if (proc.user && proc.user !== process.env.USER && proc.user !== 'root' && proc.user !== '_www') {
     reasons.push('different-user');

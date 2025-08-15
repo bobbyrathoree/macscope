@@ -1,0 +1,39 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light dark;
+  }
+  
+  body {
+    @apply bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100;
+  }
+}
+
+@layer components {
+  /* Enhanced animations for security indicators */
+  .security-indicator {
+    @apply transform transition-all duration-200 ease-in-out;
+  }
+  
+  .security-indicator:hover {
+    @apply scale-105 shadow-lg;
+  }
+  
+  .critical-pulse {
+    animation: critical-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+  
+  @keyframes critical-pulse {
+    0%, 100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.8;
+      transform: scale(1.02);
+    }
+  }
+}

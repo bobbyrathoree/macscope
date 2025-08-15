@@ -42,7 +42,7 @@ export async function getNetworkStats(): Promise<Map<number, NetworkStats>> {
       await execFileP('netstat', ['-n', '-b']);
       // Basic parsing - this is less detailed than nettop
       // netstat doesn't provide per-process byte counts on macOS
-      console.error('Network stats via nettop failed, netstat provides limited data');
+      // Network stats via nettop failed, using basic netstat
     } catch {
       // Network monitoring not available
     }

@@ -4,12 +4,17 @@ import { CodesignInfo } from './types.js';
 
 const execFileP = promisify(execFile);
 
-export async function getCodesignInfo(execPath?: string): Promise<CodesignInfo | null> {
-  if (!execPath) return null;
+export async function getCodeSignInfo(pathOrCmd: string): Promise<CodesignInfo | null> {
+  if (!pathOrCmd) return null;
+  
+  const execPath = pathOrCmd.split(' ')[0];
+  if (!execPath || !execPath.startsWith('/')) return null;
   
   try {
-    // First, verify the signature validity
-    const validityCheck = await execFileP('codesign', ['-v', '--verify', execPath])
+    // First, verify the signature validity with timeout
+    const validityCheck = await execFileP('codesign', ['-v', '--verify', execPath], {
+      timeout: 3000 // 3 second timeout
+    })
       .then(() => true)
       .catch((error) => {
         // Check if it's unsigned vs invalid signature
@@ -20,8 +25,10 @@ export async function getCodesignInfo(execPath?: string): Promise<CodesignInfo |
         return false; // Invalid signature
       });
     
-    // Get detailed info
-    const { stderr } = await execFileP('codesign', ['-dv', '--verbose=2', execPath])
+    // Get detailed info with timeout
+    const { stderr } = await execFileP('codesign', ['-dv', '--verbose=2', execPath], {
+      timeout: 3000 // 3 second timeout
+    })
       .catch(() => ({ stderr: '' }));
     
     const out = stderr.toString();
@@ -53,15 +60,16 @@ export async function getCodesignInfo(execPath?: string): Promise<CodesignInfo |
       ...(teamIdentifier !== undefined && { teamIdentifier }),
       ...(authorities.length > 0 && { authorities }),
       signed: validityCheck !== 'unsigned',
-      ...(validityCheck === true && { valid: true }),
+      valid: validityCheck === true,
       ...(notarized && { notarized }),
       ...(identifier !== undefined && { identifier }),
-      ...(isAppStore && { isAppStore })
+      appStore: isAppStore
     };
   } catch (error) {
     // Binary might not exist or no permission
     return {
-      signed: false
+      signed: false,
+      valid: false
     };
   }
 }
@@ -102,7 +110,7 @@ export async function checkBinaryTrust(info: CodesignInfo | null): Promise<{
     return { trustLevel: 'trusted', reasons };
   }
   
-  if (info.isAppStore) {
+  if (info.appStore) {
     reasons.push('app-store');
     return { trustLevel: 'trusted', reasons };
   }

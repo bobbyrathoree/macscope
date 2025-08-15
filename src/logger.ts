@@ -17,14 +17,26 @@ export async function initLogger(): Promise<void> {
   }
 }
 
-export async function logSuspiciousProcess(process: ProcessRow): Promise<void> {
+export async function logSuspiciousProcess(entry: {
+  pid: number;
+  ppid?: number;
+  name: string;
+  user?: string;
+  cmd?: string;
+  execPath?: string;
+  level: 'HIGH' | 'CRITICAL';
+  reasons: string[];
+  connections: { outbound: number; listen: number; sampleRemotes: Set<string> | string[] };
+  codesign: { signed: boolean; valid?: boolean; teamIdentifier?: string; notarized?: boolean };
+  parent?: string | null;
+}): Promise<void> {
   // Only log HIGH and CRITICAL processes
-  if (process.suspicion.level !== 'HIGH' && process.suspicion.level !== 'CRITICAL') {
+  if (entry.level !== 'HIGH' && entry.level !== 'CRITICAL') {
     return;
   }
 
   // Create unique key to avoid duplicate logging
-  const key = `${process.pid}-${process.name}-${process.suspicion.level}`;
+  const key = `${entry.pid}-${entry.name}-${entry.level}`;
   if (loggedProcesses.has(key)) {
     return;
   }
@@ -33,25 +45,27 @@ export async function logSuspiciousProcess(process: ProcessRow): Promise<void> {
   const timestamp = new Date().toISOString();
   const logEntry = {
     timestamp,
-    level: process.suspicion.level,
-    pid: process.pid,
-    ppid: process.ppid,
-    name: process.name,
-    user: process.user,
-    cmd: process.cmd,
-    execPath: process.execPath,
-    parent: process.parentName,
-    reasons: process.suspicion.reasons,
+    level: entry.level,
+    pid: entry.pid,
+    ppid: entry.ppid,
+    name: entry.name,
+    user: entry.user,
+    cmd: entry.cmd,
+    execPath: entry.execPath,
+    parent: entry.parent,
+    reasons: entry.reasons,
     connections: {
-      outbound: process.conn?.outbound || 0,
-      listen: process.conn?.listen || 0,
-      remotes: process.conn?.sampleRemotes ? [...process.conn.sampleRemotes].slice(0, 5) : []
+      outbound: entry.connections.outbound || 0,
+      listen: entry.connections.listen || 0,
+      remotes: Array.isArray(entry.connections.sampleRemotes) 
+        ? entry.connections.sampleRemotes.slice(0, 5)
+        : [...entry.connections.sampleRemotes].slice(0, 5)
     },
     codesign: {
-      signed: process.csig?.signed,
-      valid: process.csig?.valid,
-      teamId: process.csig?.teamIdentifier,
-      notarized: process.csig?.notarized
+      signed: entry.codesign?.signed,
+      valid: entry.codesign?.valid,
+      teamId: entry.codesign?.teamIdentifier,
+      notarized: entry.codesign?.notarized
     }
   };
 
