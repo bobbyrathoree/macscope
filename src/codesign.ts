@@ -32,7 +32,8 @@ export async function getCodesignInfo(execPath?: string): Promise<CodesignInfo |
     
     // Extract certificate authorities chain
     const authorities = [...out.matchAll(/Authority=(.+)/g)]
-      .map(m => m[1].trim());
+      .map(m => m[1]?.trim())
+      .filter((auth): auth is string => auth !== undefined);
     
     // Check if it's notarized (more secure)
     const notarized = out.includes('Notarized=yes') || 
@@ -49,19 +50,18 @@ export async function getCodesignInfo(execPath?: string): Promise<CodesignInfo |
     );
     
     return {
-      teamIdentifier,
-      authorities,
+      ...(teamIdentifier !== undefined && { teamIdentifier }),
+      ...(authorities.length > 0 && { authorities }),
       signed: validityCheck !== 'unsigned',
-      valid: validityCheck === true,
-      notarized,
-      identifier,
-      isAppStore
+      ...(validityCheck === true && { valid: true }),
+      ...(notarized && { notarized }),
+      ...(identifier !== undefined && { identifier }),
+      ...(isAppStore && { isAppStore })
     };
   } catch (error) {
     // Binary might not exist or no permission
     return {
-      signed: false,
-      valid: false
+      signed: false
     };
   }
 }

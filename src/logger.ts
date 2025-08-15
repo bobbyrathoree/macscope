@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { ProcessRow, SuspicionLevel } from './types.js';
+import { ProcessRow } from './types.js';
 
 const LOG_DIR = path.join(os.homedir(), '.procscope');
 const LOG_FILE = path.join(LOG_DIR, 'suspicious-processes.log');

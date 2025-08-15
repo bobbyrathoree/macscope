@@ -8,7 +8,9 @@
   },
   "scripts": {
     "dev": "tsx src/index.tsx",
-    "start": "tsx src/index.tsx"
+    "start": "tsx src/index.tsx",
+    "view-logs": "node view-logs.js",
+    "logs": "node view-logs.js"
   },
   "dependencies": {
     "ink": "^5.1.0",

@@ -1,7 +1,6 @@
 import { ProcInfo, ConnSummary, CodesignInfo, SuspicionInfo, SuspicionLevel, SUSPICIOUS_PATTERNS, SUSPICIOUS_LOCATIONS, TRUSTED_TEAMS } from './types.js';
 import { checkBinaryTrust } from './codesign.js';
 import os from 'node:os';
-import path from 'node:path';
 
 export async function analyzeSecurity(
   proc: ProcInfo,

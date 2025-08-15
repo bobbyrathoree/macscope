@@ -21,7 +21,7 @@ export async function getNetworkStats(): Promise<Map<number, NetworkStats>> {
       // Parse nettop output format
       // Format: <process>.<pid> <bytes_in> <bytes_out>
       const match = line.match(/^(.+)\.(\d+)\s+(\d+)\s+(\d+)/);
-      if (match) {
+      if (match && match[2] && match[3] && match[4]) {
         const pid = parseInt(match[2], 10);
         const bytesIn = parseInt(match[3], 10);
         const bytesOut = parseInt(match[4], 10);
@@ -39,7 +39,7 @@ export async function getNetworkStats(): Promise<Map<number, NetworkStats>> {
   } catch (error) {
     // Fallback to netstat if nettop fails
     try {
-      const { stdout } = await execFileP('netstat', ['-n', '-b']);
+      await execFileP('netstat', ['-n', '-b']);
       // Basic parsing - this is less detailed than nettop
       // netstat doesn't provide per-process byte counts on macOS
       console.error('Network stats via nettop failed, netstat provides limited data');

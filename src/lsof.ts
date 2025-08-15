@@ -1,4 +1,3 @@
-
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 const execFileP = promisify(execFile);
@@ -14,8 +13,17 @@ export async function getConnectionsByPid(): Promise<Record<number, ConnSummary>
       const tag = line[0], val = line.slice(1);
       if (tag==='p'){ pid = parseInt(val,10); if (!map[pid]) map[pid]={listen:0,outbound:0,sampleRemotes:new Set()}; }
       else if (tag==='n' && pid>0){
-        if (val.includes('->')){ const remote = val.split('->')[1]; map[pid].outbound++; map[pid].sampleRemotes.add(remote.split(':')[0]); }
-        else { map[pid].listen++; }
+        if (val.includes('->')){ 
+          const remote = val.split('->')[1]; 
+          if (remote) {
+            map[pid]!.outbound++; 
+            const host = remote.split(':')[0];
+            if (host) {
+              map[pid]!.sampleRemotes.add(host); 
+            }
+          }
+        }
+        else { map[pid]!.listen++; }
       }
     }
     return map;

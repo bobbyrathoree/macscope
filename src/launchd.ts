@@ -11,7 +11,9 @@ export async function getLaunchdMap(): Promise<Record<string,string>> {
       const parts = line.trim().split(/\s+/);
       if (parts.length >= 3) {
         const pid = parts[0]; const label = parts.slice(2).join(' ');
-        if (pid !== '-' && /^\d+$/.test(pid)) map[pid] = label;
+        if (pid && pid !== '-' && /^\d+$/.test(pid)) {
+          map[pid] = label;
+        }
       }
     }
     return map;

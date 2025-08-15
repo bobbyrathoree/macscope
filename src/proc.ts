@@ -1,4 +1,3 @@
-
 import psList from 'ps-list';
 import os from 'node:os';
 
@@ -10,13 +9,17 @@ export async function listProcesses(): Promise<ProcInfo[]> {
   return all.map((p:any)=>{
     const memPct = p.memory ? (p.memory / totalMem * 100) : 0;
     const execPath = extractExecPath(p.cmd || '');
-    return { pid:p.pid, ppid:p.ppid, name:p.name, cmd:p.cmd, user:p.username||p.uid||'', cpu:p.cpu||0, mem:memPct, execPath };
+    const result: ProcInfo = { pid:p.pid, ppid:p.ppid, name:p.name, cmd:p.cmd, user:p.username||p.uid||'', cpu:p.cpu||0, mem:memPct };
+    if (execPath) result.execPath = execPath;
+    return result;
   });
 }
 function extractExecPath(cmd: string): string|undefined {
   if (!cmd) return undefined;
-  const token = cmd.trim().split(' ')[0].replace(/^"|"$/g, '');
-  if (token.startsWith('/')) return token;
-  if (token.endsWith('.app')) return token;
+  const token = cmd.trim().split(' ')[0];
+  if (!token) return undefined;
+  const cleanToken = token.replace(/^"|"$/g, '');
+  if (cleanToken.startsWith('/')) return cleanToken;
+  if (cleanToken.endsWith('.app')) return cleanToken;
   return undefined;
 }
