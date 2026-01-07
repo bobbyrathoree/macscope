@@ -59,9 +59,9 @@ export interface NetworkStats {
 export interface CodesignData {
   signed: boolean;
   valid: boolean;
-  teamId?: string;
-  notarized?: boolean;
-  appStore?: boolean;
+  teamId?: string | undefined;
+  notarized?: boolean | undefined;
+  appStore?: boolean | undefined;
 }
 
 // Server-side codesign type (more detailed)
@@ -94,19 +94,19 @@ export interface SuspicionInfo {
  */
 export interface ProcessWireFormat {
   pid: number;
-  ppid?: number;
+  ppid?: number | undefined;
   name: string;
   cmd: string;
   user: string;
   cpu: number;
   mem: number;
-  execPath?: string;
+  execPath?: string | undefined;
   connections: ConnectionSummary;
   level: SuspicionLevel;
   reasons: string[];
-  launchd?: string;
-  codesign?: CodesignData;
-  parent?: string;
+  launchd?: string | undefined;
+  codesign?: CodesignData | undefined;
+  parent?: string | undefined;
 }
 
 // Alias for client-side usage

@@ -5,7 +5,8 @@ import { getCodeSignInfo } from '../src/codesign.js';
 import { analyzeSecurity } from '../src/security.js';
 import { logSuspiciousProcess, initLogger } from '../src/logger.js';
 import { processStore } from './store.js';
-import type { ProcessRow } from '../src/types.js';
+import type { ProcessWireFormat, CodesignInfo } from '../shared/types.js';
+import type { ProcInfo, ConnSummary } from '../src/types.js';
 
 let monitorInterval: NodeJS.Timeout | null = null;
 
@@ -28,7 +29,7 @@ const previousResults = new Map<number, CachedAnalysis>();
 /**
  * Generate a fingerprint for a process based on key identifying characteristics
  */
-function getProcessFingerprint(proc: any, conn: any): string {
+function getProcessFingerprint(proc: ProcInfo, conn: ConnSummary | undefined): string {
   const connectionCount = (conn?.outbound || 0) + (conn?.listen || 0);
   const fingerprint: ProcessFingerprint = {
     pid: proc.pid,
@@ -75,24 +76,28 @@ async function scanProcesses() {
       collectLaunchDaemons()
     ]);
     
-    const [procs, conns, launchInfo] = await Promise.race([scanPromise, timeoutPromise]);
-    
+    const [procs, conns, launchInfo] = await Promise.race([scanPromise, timeoutPromise]) as [
+      ProcInfo[],
+      Map<number, ConnSummary>,
+      Map<number, string>
+    ];
+
     // Build parent map for process injection detection
-    const parentMap = new Map<number, typeof procs[0]>();
+    const parentMap = new Map<number, ProcInfo | undefined>();
     for (const proc of procs) {
       if (proc.ppid) {
-        parentMap.set(proc.pid, procs.find(p => p.pid === proc.ppid));
+        parentMap.set(proc.pid, procs.find((p: ProcInfo) => p.pid === proc.ppid));
       }
     }
-    
+
     // Limit process analysis to prevent system overload
     const limitedProcs = procs.slice(0, 200); // Limit to 200 processes max
 
     // Track current PIDs for cleanup
-    const currentPids = new Set(limitedProcs.map(p => p.pid));
+    const currentPids = new Set(limitedProcs.map((p: ProcInfo) => p.pid));
 
     // Analyze each process with concurrency control
-    const rows: ProcessRow[] = [];
+    const rows: ProcessWireFormat[] = [];
     const batchSize = 10; // Process in small batches
     let cachedCount = 0;
     let analyzedCount = 0;
@@ -100,7 +105,7 @@ async function scanProcesses() {
     for (let i = 0; i < limitedProcs.length; i += batchSize) {
       const batch = limitedProcs.slice(i, i + batchSize);
       const batchResults = await Promise.all(
-        batch.map(async (proc) => {
+        batch.map(async (proc: ProcInfo) => {
           const conn = conns.get(proc.pid);
           const launchd = launchInfo.get(proc.pid);
           const parent = parentMap.get(proc.pid);
@@ -110,7 +115,7 @@ async function scanProcesses() {
           const previousFingerprint = processFingerprints.get(proc.pid);
 
           let suspicion: { level: 'LOW' | 'MED' | 'HIGH' | 'CRITICAL'; reasons: string[] };
-          let csig = null;
+          let csig: CodesignInfo | null = null;
 
           // Check if process fingerprint changed
           if (previousFingerprint === currentFingerprint && previousResults.has(proc.pid)) {
@@ -126,8 +131,8 @@ async function scanProcesses() {
               try {
                 csig = await Promise.race([
                   getCodeSignInfo(proc.execPath || proc.cmd || ''),
-                  new Promise((_, reject) => setTimeout(() => reject(new Error('Codesign timeout')), 2000))
-                ]);
+                  new Promise<CodesignInfo>((_, reject) => setTimeout(() => reject(new Error('Codesign timeout')), 2000))
+                ]) as CodesignInfo;
               } catch (err) {
                 // Skip codesign on timeout/error
                 csig = null;
@@ -148,6 +153,7 @@ async function scanProcesses() {
           if (suspicion.level === 'HIGH' || suspicion.level === 'CRITICAL') {
             logSuspiciousProcess({
               ...proc,
+              name: proc.name || 'unknown',
               level: suspicion.level,
               reasons: suspicion.reasons,
               connections: conn || { outbound: 0, listen: 0, sampleRemotes: new Set() },
@@ -175,10 +181,10 @@ async function scanProcesses() {
             launchd: launchd || undefined,
             codesign: csig ? {
               signed: csig.signed,
-              valid: csig.valid,
+              valid: csig.valid || false,
               teamId: csig.teamIdentifier,
               notarized: csig.notarized,
-              appStore: csig.appStore
+              appStore: csig.isAppStore
             } : undefined,
             parent: parent?.name
           };

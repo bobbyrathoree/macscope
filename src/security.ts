@@ -291,7 +291,7 @@ export async function analyzeSecurity(
     };
 
     // Check each category
-    for (const [category, config] of Object.entries(suspiciousParentPatterns)) {
+    for (const config of Object.values(suspiciousParentPatterns)) {
       const isMatchingParent = config.patterns.some(pattern => parentName.includes(pattern));
       const isDangerousChild = config.dangerousChildren.test(procName) ||
                                config.dangerousChildren.test(proc.cmd || '');

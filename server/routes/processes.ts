@@ -7,9 +7,6 @@ import os from 'node:os';
 // Rate limiting store: IP -> { count, resetTime }
 const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
 
-// Valid signals for kill operations
-const VALID_SIGNALS = ['SIGTERM', 'SIGKILL', 'SIGINT', 'SIGHUP'];
-
 // Protected PIDs that cannot be killed
 const PROTECTED_PIDS = [0, 1, process.pid];
 
@@ -37,7 +34,7 @@ export const processRoutes: FastifyPluginAsync = async (fastify) => {
         }
       }
     }
-  }, async (request, reply) => {
+  }, async (_request, _reply) => {
     return processStore.getProcesses();
   });
   
@@ -101,7 +98,7 @@ export const processRoutes: FastifyPluginAsync = async (fastify) => {
         }
       }
     }
-  }, async (request, reply) => {
+  }, async (_request, _reply) => {
     const stats = processStore.getStats();
     const systemInfo = {
       platform: os.platform(),
@@ -138,7 +135,7 @@ export const processRoutes: FastifyPluginAsync = async (fastify) => {
         }
       }
     }
-  }, async (request, reply) => {
+  }, async (_request, reply) => {
     try {
       const mdmStatus = await getMdmSummary();
       return { status: mdmStatus };

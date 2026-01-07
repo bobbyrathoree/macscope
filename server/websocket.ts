@@ -1,5 +1,6 @@
 import type { FastifyRequest } from 'fastify';
 import type { WebSocket } from 'ws';
+import type { ProcessWireFormat, Delta } from '../shared/types.js';
 import { processStore } from './store.js';
 
 // Connection limiting to prevent DoS attacks
@@ -13,45 +14,12 @@ export function getConnectionCount(): number {
   return activeConnections.size;
 }
 
-interface ProcessRow {
-  pid: number;
-  ppid?: number;
-  name: string;
-  cmd: string;
-  user: string;
-  cpu: number;
-  mem: number;
-  execPath?: string;
-  connections: {
-    outbound: number;
-    listen: number;
-    remotes: string[];
-  };
-  level: string;
-  reasons: string[];
-  launchd?: string;
-  codesign?: {
-    signed: boolean;
-    valid: boolean;
-    teamId?: string;
-    notarized?: boolean;
-    appStore?: boolean;
-  };
-  parent?: string;
-}
-
-interface Delta {
-  added: ProcessRow[];
-  updated: ProcessRow[];
-  removed: number[];
-}
-
-function computeDelta(oldProcesses: ProcessRow[], newProcesses: ProcessRow[]): Delta {
+function computeDelta(oldProcesses: ProcessWireFormat[], newProcesses: ProcessWireFormat[]): Delta {
   const oldMap = new Map(oldProcesses.map(p => [p.pid, p]));
   const newMap = new Map(newProcesses.map(p => [p.pid, p]));
 
-  const added: ProcessRow[] = [];
-  const updated: ProcessRow[] = [];
+  const added: ProcessWireFormat[] = [];
+  const updated: ProcessWireFormat[] = [];
   const removed: number[] = [];
 
   // Find added and updated processes
@@ -90,7 +58,7 @@ export async function websocketHandler(socket: WebSocket, request: FastifyReques
   activeConnections.add(socket);
   console.log(`[WebSocket] Connection established (${activeConnections.size}/${MAX_CONNECTIONS}) from ${request.ip}`);
 
-  let lastSentProcesses: ProcessRow[] = [];
+  let lastSentProcesses: ProcessWireFormat[] = [];
   let lastResponseTime = Date.now();
   let heartbeatInterval: NodeJS.Timeout | null = null;
   let checkAliveInterval: NodeJS.Timeout | null = null;

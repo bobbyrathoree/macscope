@@ -1,6 +1,6 @@
-import type { ProcessRow } from '../src/types.js';
+import type { ProcessWireFormat } from '../shared/types.js';
 
-type Subscriber = (processes: ProcessRow[]) => void;
+type Subscriber = (processes: ProcessWireFormat[]) => void;
 
 interface CachedStats {
   total: number;
@@ -11,7 +11,7 @@ interface CachedStats {
 }
 
 class ProcessStore {
-  private processes: ProcessRow[] = [];
+  private processes: ProcessWireFormat[] = [];
   private subscribers: Set<Subscriber> = new Set();
   private lastUpdate = Date.now();
   private lastHash = '';
@@ -23,11 +23,11 @@ class ProcessStore {
     lastUpdate: this.lastUpdate
   };
 
-  getProcesses(): ProcessRow[] {
+  getProcesses(): ProcessWireFormat[] {
     return this.processes;
   }
 
-  getProcess(pid: number): ProcessRow | undefined {
+  getProcess(pid: number): ProcessWireFormat | undefined {
     return this.processes.find(p => p.pid === pid);
   }
 
@@ -35,7 +35,7 @@ class ProcessStore {
    * Computes a lightweight hash of the process list for change detection.
    * Includes: pid, cpu (rounded), suspicion level, and connection count.
    */
-  private computeHash(processes: ProcessRow[]): string {
+  private computeHash(processes: ProcessWireFormat[]): string {
     let hash = processes.length.toString();
 
     for (const proc of processes) {
@@ -43,7 +43,7 @@ class ProcessStore {
       hash += `|${proc.pid}`;
       hash += `:${Math.round(proc.cpu * 10)}`; // Round to 1 decimal place
       hash += `:${proc.level}`;
-      hash += `:${proc.connections?.length || 0}`;
+      hash += `:${proc.connections.outbound + proc.connections.listen}`;
     }
 
     return hash;
@@ -52,7 +52,7 @@ class ProcessStore {
   /**
    * Computes stats for the current process list.
    */
-  private computeStats(processes: ProcessRow[]): CachedStats {
+  private computeStats(processes: ProcessWireFormat[]): CachedStats {
     const critical = processes.filter(p => p.level === 'CRITICAL').length;
     const high = processes.filter(p => p.level === 'HIGH').length;
     const medium = processes.filter(p => p.level === 'MED').length;
@@ -66,7 +66,7 @@ class ProcessStore {
     };
   }
 
-  updateProcesses(newProcesses: ProcessRow[]) {
+  updateProcesses(newProcesses: ProcessWireFormat[]) {
     // Use hash-based change detection
     const newHash = this.computeHash(newProcesses);
 

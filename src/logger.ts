@@ -1,7 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { ProcessRow } from './types.js';
 import { logError } from './error-logger.js';
 
 const LOG_DIR = path.join(os.homedir(), '.procscope');

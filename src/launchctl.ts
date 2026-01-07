@@ -14,11 +14,11 @@ export async function collectLaunchDaemons(): Promise<Map<number, string>> {
     for (const line of lines) {
       const parts = line.split(/\t/);
       if (parts.length < 3) continue;
-      
-      const pid = parseInt(parts[0]);
+
+      const pid = parseInt(parts[0] || '0');
       if (isNaN(pid) || pid === -1) continue;
-      
-      const label = parts[2];
+
+      const label = parts[2] || '';
       if (label) {
         map.set(pid, label);
       }

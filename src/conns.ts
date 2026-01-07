@@ -22,8 +22,8 @@ export async function getConnectionSummary(): Promise<Map<number, ConnSummary>> 
     for (const line of lines) {
       const parts = line.split(/\s+/);
       if (parts.length < 9) continue; // Reduced from 10
-      
-      const pid = parseInt(parts[1]);
+
+      const pid = parseInt(parts[1] || '0');
       if (isNaN(pid)) continue;
       
       // lsof output format: COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME
@@ -41,7 +41,7 @@ export async function getConnectionSummary(): Promise<Map<number, ConnSummary>> 
         summary.listen++;
       } else if (name.includes('->')) {
         summary.outbound++;
-        const remote = name.split('->')[1];
+        const remote = name.split('->')[1] || '';
         if (remote && summary.sampleRemotes.size < 10) {
           summary.sampleRemotes.add(remote);
         }
