@@ -1,5 +1,6 @@
 import { parentPort } from 'node:worker_threads';
-import { getCodeSignInfo } from '../../src/codesign.js';
+// Use .ts extension for tsx worker threads (tsup will handle bundling in production)
+import { getCodeSignInfo } from '../../src/codesign.ts';
 
 /**
  * Worker thread for offloading expensive codesign operations

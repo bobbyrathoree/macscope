@@ -4,10 +4,10 @@ import corsPlugin from '@fastify/cors';
 import staticPlugin from '@fastify/static';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { processRoutes } from './routes/processes.js';
-import { websocketHandler, setLogger as setWebSocketLogger } from './websocket.js';
-import { startProcessMonitor, stopProcessMonitor, setLogger as setMonitorLogger } from './monitor.js';
-import { setLogger as setStoreLogger } from './store.js';
+import { processRoutes } from './routes/processes';
+import { websocketHandler, setLogger as setWebSocketLogger } from './websocket';
+import { startProcessMonitor, stopProcessMonitor, setLogger as setMonitorLogger } from './monitor';
+import { setLogger as setStoreLogger } from './store';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 

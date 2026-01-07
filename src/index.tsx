@@ -3,14 +3,14 @@ import React, {useEffect, useMemo, useState, useCallback, useRef} from 'react';
 import {render, Box, Text, useInput, useApp} from 'ink';
 import TextInput from 'ink-text-input';
 import isRoot from 'is-root';
-import {listProcesses} from './proc.js';
-import {getLaunchdMap} from './launchd.js';
-import {getConnectionsByPid} from './lsof.js';
-import {getCodesignInfo} from './codesign.js';
-import {getMdmSummary} from './mdm.js';
-import {analyzeSecurity} from './security.js';
-import {ProcessRow, SuspicionLevel, CodesignInfo} from './types.js';
-import {initLogger, logSuspiciousProcess, cleanupOldLogs} from './logger.js';
+import {listProcesses} from './proc';
+import {getLaunchdMap} from './launchd';
+import {getConnectionsByPid} from './lsof';
+import {getCodesignInfo} from './codesign';
+import {getMdmSummary} from './mdm';
+import {analyzeSecurity} from './security';
+import {ProcessRow, SuspicionLevel, CodesignInfo} from './types';
+import {initLogger, logSuspiciousProcess, cleanupOldLogs} from './logger';
 
 const header = () => (
   <Box flexDirection="column">

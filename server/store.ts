@@ -1,4 +1,4 @@
-import type { ProcessWireFormat } from '../shared/types.js';
+import type { ProcessWireFormat } from '../shared/types';
 import type { FastifyBaseLogger } from 'fastify';
 
 type Subscriber = (processes: ProcessWireFormat[]) => void;

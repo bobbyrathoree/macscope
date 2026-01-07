@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { stat } from 'node:fs/promises';
-import type { CodesignInfo } from './types.js';
+import type { CodesignInfo } from './types';
 
 const execFileP = promisify(execFile);
 

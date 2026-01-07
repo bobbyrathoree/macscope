@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { processStore } from '../store.js';
-import { getMdmSummary } from '../../src/mdm.js';
+import { processStore } from '../store';
+import { getMdmSummary } from '../../src/mdm';
 import isRoot from 'is-root';
 import os from 'node:os';
 

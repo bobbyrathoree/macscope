@@ -1,15 +1,15 @@
 import { Worker } from 'node:worker_threads';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { listProcesses } from '../src/proc.js';
-import { getConnectionSummary } from '../src/conns.js';
-import { collectLaunchDaemons } from '../src/launchctl.js';
-import { getCodeSignInfo } from '../src/codesign.js';
-import { analyzeSecurity } from '../src/security.js';
-import { logSuspiciousProcess, initLogger } from '../src/logger.js';
-import { processStore } from './store.js';
-import type { ProcessWireFormat, CodesignInfo } from '../shared/types.js';
-import type { ProcInfo, ConnSummary } from '../src/types.js';
+import { listProcesses } from '../src/proc';
+import { getConnectionSummary } from '../src/conns';
+import { collectLaunchDaemons } from '../src/launchctl';
+import { getCodeSignInfo } from '../src/codesign';
+import { analyzeSecurity } from '../src/security';
+import { logSuspiciousProcess, initLogger } from '../src/logger';
+import { processStore } from './store';
+import type { ProcessWireFormat, CodesignInfo } from '../shared/types';
+import type { ProcInfo, ConnSummary } from '../src/types';
 import type { FastifyBaseLogger } from 'fastify';
 
 // Logger will be injected from index.ts
@@ -48,15 +48,21 @@ class CodesignWorkerPool {
     try {
       const __filename = fileURLToPath(import.meta.url);
       const __dirname = dirname(__filename);
-      // Use .ts extension for development with tsx
-      const workerPath = join(__dirname, 'workers', 'codesign-worker.ts');
+
+      // Detect environment: in production (built with tsup), use .js; in dev (tsx), use .ts
+      const isDev = process.env.NODE_ENV !== 'production';
+      const workerFilename = isDev ? 'codesign-worker.ts' : 'codesign-worker.js';
+      const workerPath = isDev
+        ? join(__dirname, 'workers', workerFilename)
+        : join(__dirname, workerFilename); // In production, worker is in dist/ root
 
       // Create worker pool
       for (let i = 0; i < this.poolSize; i++) {
         // Use tsx to run TypeScript workers in development mode
-        const worker = new Worker(workerPath, {
-          execArgv: ['--import', 'tsx']
-        });
+        const workerOptions = isDev
+          ? { execArgv: ['--import', 'tsx'] }
+          : {};
+        const worker = new Worker(workerPath, workerOptions);
 
         worker.on('message', (message: any) => {
           if (message.type === 'ready') {

@@ -1,7 +1,7 @@
 import type { FastifyRequest } from 'fastify';
 import type { WebSocket } from 'ws';
-import type { ProcessWireFormat, Delta } from '../shared/types.js';
-import { processStore } from './store.js';
+import type { ProcessWireFormat, Delta } from '../shared/types';
+import { processStore } from './store';
 import type { FastifyBaseLogger } from 'fastify';
 
 // Logger will be injected from index.ts

@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { NetworkStats } from './types.js';
-import { logError } from './error-logger.js';
+import { NetworkStats } from './types';
+import { logError } from './error-logger';
 
 const execFileP = promisify(execFile);
 

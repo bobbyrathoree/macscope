@@ -1,5 +1,5 @@
-import { ProcInfo, ConnSummary, CodesignInfo, SuspicionInfo, SuspicionLevel, SUSPICIOUS_PATTERNS, SUSPICIOUS_LOCATIONS, TRUSTED_TEAMS } from './types.js';
-import { checkBinaryTrust } from './codesign.js';
+import { ProcInfo, ConnSummary, CodesignInfo, SuspicionInfo, SuspicionLevel, SUSPICIOUS_PATTERNS, SUSPICIOUS_LOCATIONS, TRUSTED_TEAMS } from './types';
+import { checkBinaryTrust } from './codesign';
 import os from 'node:os';
 
 /**

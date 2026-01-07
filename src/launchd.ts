@@ -1,7 +1,7 @@
 
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
-import {logError} from './error-logger.js';
+import {logError} from './error-logger';
 const execFileP = promisify(execFile);
 export async function getLaunchdMap(): Promise<Record<string,string>> {
   try {
