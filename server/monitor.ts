@@ -48,11 +48,15 @@ class CodesignWorkerPool {
     try {
       const __filename = fileURLToPath(import.meta.url);
       const __dirname = dirname(__filename);
-      const workerPath = join(__dirname, 'workers', 'codesign-worker.js');
+      // Use .ts extension for development with tsx
+      const workerPath = join(__dirname, 'workers', 'codesign-worker.ts');
 
       // Create worker pool
       for (let i = 0; i < this.poolSize; i++) {
-        const worker = new Worker(workerPath);
+        // Use tsx to run TypeScript workers in development mode
+        const worker = new Worker(workerPath, {
+          execArgv: ['--import', 'tsx']
+        });
 
         worker.on('message', (message: any) => {
           if (message.type === 'ready') {

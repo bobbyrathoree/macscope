@@ -9,10 +9,17 @@ import {
   ColumnDef,
 } from '@tanstack/react-table';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { ChevronUp, ChevronDown, AlertTriangle, Shield, Network, Terminal } from 'lucide-react';
+import { ChevronUp, ChevronDown, Network } from 'lucide-react';
 import clsx from 'clsx';
 import type { ProcessData } from '../types';
 import { ProcessDetails } from './ProcessDetails';
+
+// Extend the column meta type to include width
+declare module '@tanstack/react-table' {
+  interface ColumnMeta<TData, TValue> {
+    width?: string;
+  }
+}
 
 // Helper functions extracted outside component to prevent recreation
 const getLevelStyle = (level: string) => {
@@ -68,17 +75,18 @@ const levelDescriptions = {
   'LOW': '✅ Low risk - normal system activity'
 };
 
-const reasonIcons: Record<string, React.ReactNode> = {
-  'keylogger-pattern': <AlertTriangle className="w-3 h-3 text-red-500" />,
-  'keylogger-with-network-activity': <AlertTriangle className="w-3 h-3 text-red-600 animate-pulse" />,
-  'input-monitoring-with-network': <AlertTriangle className="w-3 h-3 text-red-600 animate-pulse" />,
-  'unsigned-input-monitor': <Shield className="w-3 h-3 text-red-500" />,
-  'browser-spawned-input-monitor': <Terminal className="w-3 h-3 text-orange-500" />,
-  'accessibility-with-network': <AlertTriangle className="w-3 h-3 text-red-600" />,
-  'suspicious-data-upload-pattern': <Network className="w-3 h-3 text-orange-500" />,
-  'screen-recorder': <Terminal className="w-3 h-3 text-orange-500" />,
-  'unsigned-binary': <Shield className="w-3 h-3 text-yellow-500" />,
-};
+// Unused for now but available for future use
+// const reasonIcons: Record<string, React.ReactNode> = {
+//   'keylogger-pattern': <AlertTriangle className="w-3 h-3 text-red-500" />,
+//   'keylogger-with-network-activity': <AlertTriangle className="w-3 h-3 text-red-600 animate-pulse" />,
+//   'input-monitoring-with-network': <AlertTriangle className="w-3 h-3 text-red-600 animate-pulse" />,
+//   'unsigned-input-monitor': <Shield className="w-3 h-3 text-red-500" />,
+//   'browser-spawned-input-monitor': <Terminal className="w-3 h-3 text-orange-500" />,
+//   'accessibility-with-network': <AlertTriangle className="w-3 h-3 text-red-600" />,
+//   'suspicious-data-upload-pattern': <Network className="w-3 h-3 text-orange-500" />,
+//   'screen-recorder': <Terminal className="w-3 h-3 text-orange-500" />,
+//   'unsigned-binary': <Shield className="w-3 h-3 text-yellow-500" />,
+// };
 
 const reasonDescriptions: Record<string, string> = {
   'keylogger-pattern': 'Matches known keylogger signatures',
@@ -100,6 +108,18 @@ const reasonDescriptions: Record<string, string> = {
 
 const columnHelper = createColumnHelper<ProcessData>();
 
+// Column width mapping for alignment
+const columnWidths: Record<string, string> = {
+  level: 'w-20',      // 80px - Risk
+  pid: 'w-20',        // 80px - PID
+  name: 'w-48',       // 192px - Process
+  user: 'w-24',       // 96px - User
+  cpu: 'w-20',        // 80px - CPU %
+  mem: 'w-20',        // 80px - Mem %
+  connections: 'w-32', // 128px - Network
+  reasons: 'flex-1',  // remaining space - Indicators
+};
+
 // Create column definitions function that will be called once inside the component
 const createColumns = (): ColumnDef<ProcessData, any>[] => [
   columnHelper.accessor('level', {
@@ -118,10 +138,16 @@ const createColumns = (): ColumnDef<ProcessData, any>[] => [
         </span>
       );
     },
+    meta: {
+      width: columnWidths.level,
+    },
   }),
   columnHelper.accessor('pid', {
     header: 'PID',
     cell: (info) => <span className="font-mono text-sm">{info.getValue()}</span>,
+    meta: {
+      width: columnWidths.pid,
+    },
   }),
   columnHelper.accessor('name', {
     header: 'Process',
@@ -135,22 +161,34 @@ const createColumns = (): ColumnDef<ProcessData, any>[] => [
         )}
       </div>
     ),
+    meta: {
+      width: columnWidths.name,
+    },
   }),
   columnHelper.accessor('user', {
     header: 'User',
     cell: (info) => <span className="text-sm">{info.getValue()}</span>,
+    meta: {
+      width: columnWidths.user,
+    },
   }),
   columnHelper.accessor('cpu', {
     header: 'CPU %',
     cell: (info) => (
       <span className="font-mono text-sm">{info.getValue().toFixed(1)}</span>
     ),
+    meta: {
+      width: columnWidths.cpu,
+    },
   }),
   columnHelper.accessor('mem', {
     header: 'Mem %',
     cell: (info) => (
       <span className="font-mono text-sm">{info.getValue().toFixed(1)}</span>
     ),
+    meta: {
+      width: columnWidths.mem,
+    },
   }),
   columnHelper.accessor('connections', {
     header: 'Network',
@@ -175,6 +213,9 @@ const createColumns = (): ColumnDef<ProcessData, any>[] => [
         </div>
       );
     },
+    meta: {
+      width: columnWidths.connections,
+    },
   }),
   columnHelper.accessor('reasons', {
     header: 'Indicators',
@@ -184,7 +225,7 @@ const createColumns = (): ColumnDef<ProcessData, any>[] => [
 
       return (
         <div className="flex flex-wrap gap-1">
-          {reasons.slice(0, 3).map((r, i) => (
+          {reasons.slice(0, 3).map((r: string, i: number) => (
             <span
               key={i}
               className={clsx(
@@ -210,6 +251,9 @@ const createColumns = (): ColumnDef<ProcessData, any>[] => [
           )}
         </div>
       );
+    },
+    meta: {
+      width: columnWidths.reasons,
     },
   }),
 ];
@@ -259,14 +303,17 @@ export function ProcessTable({ processes }: ProcessTableProps) {
     <>
       <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full table-fixed">
             <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10">
               {table.getHeaderGroups().map((headerGroup) => (
                 <tr key={headerGroup.id}>
                   {headerGroup.headers.map((header) => (
                     <th
                       key={header.id}
-                      className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-750"
+                      className={clsx(
+                        "px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-750",
+                        header.column.columnDef.meta?.width
+                      )}
                       onClick={header.column.getToggleSortingHandler()}
                     >
                       <div className="flex items-center gap-1">
@@ -298,7 +345,7 @@ export function ProcessTable({ processes }: ProcessTableProps) {
             style={{ height: '600px' }}
           >
             <div style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }}>
-              <table className="w-full">
+              <table className="w-full table-fixed">
                 <tbody>
                   {virtualItems.map((virtualRow) => {
                     const row = rows[virtualRow.index];
@@ -319,7 +366,10 @@ export function ProcessTable({ processes }: ProcessTableProps) {
                         {row.getVisibleCells().map((cell) => (
                           <td
                             key={cell.id}
-                            className="px-4 py-3 text-sm whitespace-nowrap"
+                            className={clsx(
+                              "px-4 py-3 text-sm whitespace-nowrap",
+                              cell.column.columnDef.meta?.width
+                            )}
                           >
                             {flexRender(cell.column.columnDef.cell, cell.getContext())}
                           </td>

@@ -2,6 +2,68 @@ import { ProcInfo, ConnSummary, CodesignInfo, SuspicionInfo, SuspicionLevel, SUS
 import { checkBinaryTrust } from './codesign.js';
 import os from 'node:os';
 
+/**
+ * Check if a process is an Apple-signed system binary
+ * These should be exempt from pattern-based detection to avoid false positives
+ */
+function isAppleSystemProcess(proc: ProcInfo, csig?: CodesignInfo | null): boolean {
+  // Must be signed by Apple
+  if (!csig || !csig.signed) return false;
+
+  // Check for Apple signing authority
+  const isAppleSigned = csig.authorities?.some(auth =>
+    auth.includes('Apple') || auth === 'Software Signing'
+  ) ?? false;
+
+  if (!isAppleSigned) return false;
+
+  // Must be running from system paths
+  const execPath = proc.execPath || proc.cmd || '';
+  const systemPaths = [
+    '/System/',
+    '/usr/libexec/',
+    '/usr/sbin/',
+    '/usr/bin/',
+    '/sbin/',
+    '/bin/',
+    '/Library/Apple/',
+    '/Applications/Utilities/'
+  ];
+
+  return systemPaths.some(path => execPath.startsWith(path));
+}
+
+/**
+ * Known legitimate Apple daemon names that might trigger false positives
+ * Maps process names to their legitimate Apple identifiers
+ */
+const APPLE_SYSTEM_DAEMONS: Record<string, string> = {
+  // Crypto-related (not cryptominers!)
+  'ctkd': 'com.apple.ctkd',                    // CryptoTokenKit daemon
+  'cryptexd': 'com.apple.cryptexd',            // Cryptex daemon
+  'cryptoservicesd': 'com.apple.security',     // Security/crypto services
+
+  // Family-related (not keyloggers!)
+  'familycircled': 'com.apple.familycircled',  // Family Sharing daemon
+  'familycontrols': 'com.apple.familycontrols',
+  'familynotificationd': 'com.apple.familynotificationd',
+
+  // Processes with similar names to other system processes
+  'systemstatusd': 'com.apple.systemstatusd',  // NOT mimicking systemstats
+  'apfsd': 'com.apple.apfsd',                  // Apple File System daemon, NOT mimicking apsd
+  'cfprefsd': 'com.apple.cfprefsd',            // Core Foundation prefs
+  'configd': 'com.apple.configd',              // System configuration
+  'coreaudiod': 'com.apple.coreaudiod',        // Core Audio daemon
+  'coreservicesd': 'com.apple.coreservices',   // Core Services
+  'distnoted': 'com.apple.distnoted',          // Distributed notifications
+  'mds': 'com.apple.mds',                      // Metadata server
+  'mdworker': 'com.apple.mdworker',            // Spotlight indexer
+  'notifyd': 'com.apple.notifyd',              // Notification daemon
+  'securityd': 'com.apple.securityd',          // Security daemon
+  'trustd': 'com.apple.trustd',                // Certificate trust
+  'usernoted': 'com.apple.usernoted',          // User notifications
+};
+
 export async function analyzeSecurity(
   proc: ProcInfo,
   conn?: ConnSummary,
@@ -12,13 +74,24 @@ export async function analyzeSecurity(
   const reasons: string[] = [];
   let level: SuspicionLevel = 'LOW';
 
+  // EARLY EXIT: Skip pattern-based detection for verified Apple system processes
+  const isAppleProcess = isAppleSystemProcess(proc, csig);
+  const procName = (proc.name || '').toLowerCase();
+  const isKnownAppleDaemon = APPLE_SYSTEM_DAEMONS[procName] !== undefined;
+
+  // Add positive indicator for Apple-signed system processes
+  if (isAppleProcess || isKnownAppleDaemon) {
+    reasons.push('apple-signed');
+  }
+
   // CRITICAL: Keylogger with network activity (data exfiltration)
-  const isKeylogger = SUSPICIOUS_PATTERNS.keyloggers.some(pattern =>
+  // Skip for Apple-signed system processes (e.g., familycircled is Family Sharing, not a keylogger)
+  const isKeylogger = !isAppleProcess && !isKnownAppleDaemon && SUSPICIOUS_PATTERNS.keyloggers.some(pattern =>
     (proc.name || '').toLowerCase().includes(pattern) ||
     (proc.cmd || '').toLowerCase().includes(pattern) ||
     (proc.execPath || '').toLowerCase().includes(pattern)
   );
-  
+
   if (isKeylogger) {
     if (conn && conn.outbound > 0) {
       reasons.push('keylogger-with-network-activity');
@@ -155,11 +228,14 @@ export async function analyzeSecurity(
   }
 
   // Check for crypto miners
-  for (const pattern of SUSPICIOUS_PATTERNS.cryptominers) {
-    if (cmdLower.includes(pattern) || nameLower.includes(pattern)) {
-      reasons.push('cryptominer');
-      level = 'HIGH';
-      break;
+  // Skip for Apple-signed processes (e.g., ctkd is CryptoTokenKit, not a cryptominer)
+  if (!isAppleProcess && !isKnownAppleDaemon) {
+    for (const pattern of SUSPICIOUS_PATTERNS.cryptominers) {
+      if (cmdLower.includes(pattern) || nameLower.includes(pattern)) {
+        reasons.push('cryptominer');
+        level = 'HIGH';
+        break;
+      }
     }
   }
 
@@ -397,12 +473,15 @@ export async function analyzeSecurity(
   }
 
   // Check for process names mimicking system processes (homoglyph/typosquatting)
-  if (proc.name) {
+  // Skip for Apple-signed processes - they ARE the legitimate system processes
+  if (proc.name && !isAppleProcess && !isKnownAppleDaemon) {
     const systemProcesses = [
       'kernel_task', 'launchd', 'systemd', 'init', 'loginwindow',
       'WindowServer', 'Finder', 'Dock', 'mds', 'mdworker', 'cfprefsd',
       'systemstats', 'distnoted', 'configd', 'coreaudiod', 'audiomxd',
-      'UserEventAgent', 'coreservicesd', 'apsd', 'securityd'
+      'UserEventAgent', 'coreservicesd', 'apsd', 'securityd',
+      // Add the variants so we don't flag legitimate related daemons
+      'systemstatusd', 'apfsd'
     ];
 
     for (const sysProc of systemProcesses) {
