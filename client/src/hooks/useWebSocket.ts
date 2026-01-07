@@ -1,9 +1,15 @@
 import { useEffect, useRef } from 'react';
 import type { ProcessData } from '../types';
 
+interface Delta {
+  added: ProcessData[];
+  updated: ProcessData[];
+  removed: number[];
+}
+
 interface WebSocketMessage {
-  type: 'initial' | 'update' | 'pong';
-  data?: ProcessData[];
+  type: 'initial' | 'update' | 'delta' | 'pong';
+  data?: ProcessData[] | Delta;
 }
 
 // Singleton WebSocket connection

@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { ProcessRow } from './types.js';
+import { logError } from './error-logger.js';
 
 const LOG_DIR = path.join(os.homedir(), '.procscope');
 const LOG_FILE = path.join(LOG_DIR, 'suspicious-processes.log');
@@ -13,6 +14,7 @@ export async function initLogger(): Promise<void> {
   try {
     await fs.mkdir(LOG_DIR, { recursive: true });
   } catch (error) {
+    await logError('logger:initLogger', error);
     // Directory might already exist
   }
 }
@@ -73,6 +75,7 @@ export async function logSuspiciousProcess(entry: {
     const logLine = JSON.stringify(logEntry) + '\n';
     await fs.appendFile(LOG_FILE, logLine);
   } catch (error) {
+    await logError('logger:logSuspiciousProcess', error);
     // Silently fail logging to not interrupt the UI
   }
 }
@@ -87,14 +90,16 @@ export async function getRecentSuspiciousProcesses(hours: number = 24): Promise<
       .map(line => {
         try {
           return JSON.parse(line);
-        } catch {
+        } catch (parseError) {
+          logError('logger:getRecentSuspiciousProcesses:parse', parseError);
           return null;
         }
       })
       .filter(entry => entry && new Date(entry.timestamp) > cutoff);
-    
+
     return recent;
-  } catch {
+  } catch (error) {
+    await logError('logger:getRecentSuspiciousProcesses', error);
     return [];
   }
 }
@@ -110,13 +115,15 @@ export async function cleanupOldLogs(): Promise<void> {
       try {
         const entry = JSON.parse(line);
         return new Date(entry.timestamp) > cutoff;
-      } catch {
+      } catch (parseError) {
+        logError('logger:cleanupOldLogs:parse', parseError);
         return false;
       }
     });
-    
+
     await fs.writeFile(LOG_FILE, recentLines.join('\n') + '\n');
-  } catch {
+  } catch (error) {
+    await logError('logger:cleanupOldLogs', error);
     // Ignore cleanup errors
   }
 }

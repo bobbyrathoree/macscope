@@ -13,7 +13,7 @@ export async function analyzeSecurity(
   let level: SuspicionLevel = 'LOW';
 
   // CRITICAL: Keylogger with network activity (data exfiltration)
-  const isKeylogger = SUSPICIOUS_PATTERNS.keyloggers.some(pattern => 
+  const isKeylogger = SUSPICIOUS_PATTERNS.keyloggers.some(pattern =>
     (proc.name || '').toLowerCase().includes(pattern) ||
     (proc.cmd || '').toLowerCase().includes(pattern) ||
     (proc.execPath || '').toLowerCase().includes(pattern)
@@ -123,17 +123,11 @@ export async function analyzeSecurity(
     level = 'MED';
   }
 
-  // Check for keyloggers
+  // Prepare lowercase versions for pattern matching
   const cmdLower = (proc.cmd || '').toLowerCase();
   const nameLower = (proc.name || '').toLowerCase();
-  
-  for (const pattern of SUSPICIOUS_PATTERNS.keyloggers) {
-    if (cmdLower.includes(pattern) || nameLower.includes(pattern)) {
-      reasons.push('keylogger-pattern');
-      level = 'HIGH';
-      break;
-    }
-  }
+
+  // Note: Keylogger detection is handled above (lines 16-30) with network activity analysis
 
   // Check for screen recorders
   for (const pattern of SUSPICIOUS_PATTERNS.screenRecorders) {

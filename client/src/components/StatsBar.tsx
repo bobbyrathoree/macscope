@@ -1,3 +1,4 @@
+import { useMemo, memo } from 'react';
 import { AlertTriangle, AlertCircle, Activity, Cpu } from 'lucide-react';
 import clsx from 'clsx';
 import type { ProcessData, SystemStats } from '../types';
@@ -8,12 +9,39 @@ interface StatsBarProps {
 }
 
 export function StatsBar({ processes, systemStats }: StatsBarProps) {
-  const critical = processes.filter(p => p.level === 'CRITICAL').length;
-  const high = processes.filter(p => p.level === 'HIGH').length;
-  const medium = processes.filter(p => p.level === 'MED').length;
-  
-  const memUsage = systemStats ? 
-    ((systemStats.system.totalMem - systemStats.system.freeMem) / systemStats.system.totalMem * 100).toFixed(1) : 0;
+  // Memoize level counts with a single loop
+  const { critical, high, medium } = useMemo(() => {
+    let criticalCount = 0;
+    let highCount = 0;
+    let mediumCount = 0;
+
+    for (const p of processes) {
+      if (p.level === 'CRITICAL') criticalCount++;
+      else if (p.level === 'HIGH') highCount++;
+      else if (p.level === 'MED') mediumCount++;
+    }
+
+    return {
+      critical: criticalCount,
+      high: highCount,
+      medium: mediumCount
+    };
+  }, [processes]);
+
+  // Memoize keylogger detection
+  const keyloggers = useMemo(() => {
+    return processes.filter(p =>
+      p.level === 'CRITICAL' &&
+      p.reasons.some(r => r.includes('keylogger') || r.includes('input-monitoring'))
+    );
+  }, [processes]);
+
+  // Memoize memory usage calculation
+  const memUsage = useMemo(() => {
+    return systemStats
+      ? ((systemStats.system.totalMem - systemStats.system.freeMem) / systemStats.system.totalMem * 100).toFixed(1)
+      : 0;
+  }, [systemStats]);
   
   return (
     <div className="bg-gray-100 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
@@ -60,17 +88,11 @@ export function StatsBar({ processes, systemStats }: StatsBarProps) {
             <p className="text-sm text-red-700 dark:text-red-300 font-medium">
               🚨 {critical} critical threat{critical !== 1 ? 's' : ''} detected - immediate action recommended
             </p>
-            {(() => {
-              const keyloggers = processes.filter(p => 
-                p.level === 'CRITICAL' && 
-                p.reasons.some(r => r.includes('keylogger') || r.includes('input-monitoring'))
-              );
-              return keyloggers.length > 0 && (
-                <p className="text-xs text-red-600 dark:text-red-400 mt-1">
-                  ⌨️ {keyloggers.length} process{keyloggers.length !== 1 ? 'es' : ''} detected with input monitoring + network activity
-                </p>
-              );
-            })()}
+            {keyloggers.length > 0 && (
+              <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                ⌨️ {keyloggers.length} process{keyloggers.length !== 1 ? 'es' : ''} detected with input monitoring + network activity
+              </p>
+            )}
           </div>
         )}
         
@@ -86,13 +108,14 @@ export function StatsBar({ processes, systemStats }: StatsBarProps) {
   );
 }
 
-function StatCard({ 
-  icon, 
-  label, 
-  value, 
-  className, 
-  pulse 
-}: { 
+// Memoize StatCard to prevent re-renders when props haven't changed
+const StatCard = memo(function StatCard({
+  icon,
+  label,
+  value,
+  className,
+  pulse
+}: {
   icon: React.ReactNode;
   label: string;
   value: string | number;
@@ -110,4 +133,4 @@ function StatCard({
       <span className="font-semibold">{value}</span>
     </div>
   );
-}
+});

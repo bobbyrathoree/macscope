@@ -1,5 +1,6 @@
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
+import {logError} from './error-logger.js';
 const execFileP = promisify(execFile);
 export type ConnSummary = { listen: number; outbound: number; sampleRemotes: Set<string>; };
 export async function getConnectionsByPid(): Promise<Record<number, ConnSummary>> {
@@ -27,5 +28,8 @@ export async function getConnectionsByPid(): Promise<Record<number, ConnSummary>
       }
     }
     return map;
-  } catch { return {}; }
+  } catch (error) {
+    await logError('lsof:getConnectionsByPid', error);
+    return {};
+  }
 }

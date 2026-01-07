@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { ProcessTable } from './components/ProcessTable';
 import { StatsBar } from './components/StatsBar';
 import { Header } from './components/Header';
@@ -18,7 +18,36 @@ function App() {
   
   useWebSocket((data) => {
     if (data.type === 'initial' || data.type === 'update') {
-      setProcesses(data.data);
+      setProcesses(data.data as ProcessData[]);
+    } else if (data.type === 'delta') {
+      const delta = data.data as {
+        added: ProcessData[];
+        updated: ProcessData[];
+        removed: number[];
+      };
+
+      setProcesses((prevProcesses) => {
+        // Create a map for efficient lookup
+        const processMap = new Map(prevProcesses.map(p => [p.pid, p]));
+
+        // Remove processes
+        delta.removed.forEach(pid => {
+          processMap.delete(pid);
+        });
+
+        // Update existing processes
+        delta.updated.forEach(proc => {
+          processMap.set(proc.pid, proc);
+        });
+
+        // Add new processes
+        delta.added.forEach(proc => {
+          processMap.set(proc.pid, proc);
+        });
+
+        // Convert map back to array
+        return Array.from(processMap.values());
+      });
     }
   });
   
@@ -29,15 +58,22 @@ function App() {
       document.documentElement.classList.remove('dark');
     }
   }, [darkMode]);
-  
-  const filteredProcesses = processes
-    .slice(0, processLimit)
-    .filter(p => 
-      !filter || 
-      (p.name || '').toLowerCase().includes(filter.toLowerCase()) ||
-      (p.cmd || '').toLowerCase().includes(filter.toLowerCase()) ||
-      (p.user || '').toLowerCase().includes(filter.toLowerCase())
-    );
+
+  // Memoize filtered processes with proper order: filter THEN slice
+  const filteredProcesses = useMemo(() => {
+    // Pre-compute lowercase filter once
+    const lowerFilter = filter.toLowerCase();
+
+    // Filter first (if filter exists), then slice
+    return processes
+      .filter(p =>
+        !filter ||
+        (p.name || '').toLowerCase().includes(lowerFilter) ||
+        (p.cmd || '').toLowerCase().includes(lowerFilter) ||
+        (p.user || '').toLowerCase().includes(lowerFilter)
+      )
+      .slice(0, processLimit);
+  }, [processes, filter, processLimit]);
   
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">

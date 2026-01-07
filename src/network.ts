@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { NetworkStats } from './types.js';
+import { logError } from './error-logger.js';
 
 const execFileP = promisify(execFile);
 
@@ -37,13 +38,15 @@ export async function getNetworkStats(): Promise<Map<number, NetworkStats>> {
       }
     }
   } catch (error) {
+    await logError('network:getNetworkStats:nettop', error);
     // Fallback to netstat if nettop fails
     try {
       await execFileP('netstat', ['-n', '-b']);
       // Basic parsing - this is less detailed than nettop
       // netstat doesn't provide per-process byte counts on macOS
       // Network stats via nettop failed, using basic netstat
-    } catch {
+    } catch (netstatError) {
+      await logError('network:getNetworkStats:netstat-fallback', netstatError);
       // Network monitoring not available
     }
   }
@@ -119,7 +122,8 @@ export async function getNetworkConnections(pid: number): Promise<{
         });
       }
     }
-  } catch {
+  } catch (error) {
+    await logError('network:getNetworkConnections', error);
     // Process might have ended or no permissions
   }
   

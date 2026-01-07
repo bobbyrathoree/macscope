@@ -1,5 +1,6 @@
 import { X, Shield, AlertTriangle, Network, Terminal, FileText } from 'lucide-react';
 import clsx from 'clsx';
+import { useEffect, useRef } from 'react';
 import type { ProcessData } from '../types';
 
 interface ProcessDetailsProps {
@@ -8,20 +9,102 @@ interface ProcessDetailsProps {
 }
 
 export function ProcessDetails({ process, onClose }: ProcessDetailsProps) {
+  const modalRef = useRef<HTMLDivElement>(null);
+  const previousActiveElement = useRef<HTMLElement | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    // Store the element that was focused before opening the modal
+    previousActiveElement.current = document.activeElement as HTMLElement;
+
+    // Focus the close button when modal opens
+    closeButtonRef.current?.focus();
+
+    // Lock body scroll
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    // Handle Escape key
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    // Handle Tab key for focus trap
+    const handleTab = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab' || !modalRef.current) return;
+
+      const focusableElements = modalRef.current.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      const focusableArray = Array.from(focusableElements);
+      const firstElement = focusableArray[0];
+      const lastElement = focusableArray[focusableArray.length - 1];
+
+      if (e.shiftKey) {
+        // Shift + Tab: if on first element, go to last
+        if (document.activeElement === firstElement) {
+          e.preventDefault();
+          lastElement?.focus();
+        }
+      } else {
+        // Tab: if on last element, go to first
+        if (document.activeElement === lastElement) {
+          e.preventDefault();
+          firstElement?.focus();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleEscape);
+    document.addEventListener('keydown', handleTab);
+
+    // Cleanup function
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+      document.removeEventListener('keydown', handleTab);
+      document.body.style.overflow = originalOverflow;
+
+      // Return focus to the element that had it before the modal opened
+      if (previousActiveElement.current) {
+        previousActiveElement.current.focus();
+      }
+    };
+  }, [onClose]);
+
+  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    // Close modal if clicking the backdrop (not the modal content)
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  };
+
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl max-w-3xl w-full max-h-[80vh] overflow-y-auto">
+    <div
+      className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      onClick={handleBackdropClick}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-title"
+    >
+      <div
+        ref={modalRef}
+        className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl max-w-3xl w-full max-h-[80vh] overflow-y-auto"
+      >
         <div className="sticky top-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 p-6">
           <div className="flex items-start justify-between">
             <div>
-              <h2 className="text-2xl font-bold">{process.name}</h2>
+              <h2 id="modal-title" className="text-2xl font-bold">{process.name}</h2>
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                 PID: {process.pid} {process.ppid && `• PPID: ${process.ppid}`}
               </p>
             </div>
             <button
+              ref={closeButtonRef}
               onClick={onClose}
               className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+              aria-label="Close modal"
             >
               <X className="w-5 h-5" />
             </button>
