@@ -120,6 +120,14 @@ const columnWidths: Record<string, string> = {
   reasons: 'flex-1',  // remaining space - Indicators
 };
 
+// Risk level order for sorting
+const levelOrder: Record<string, number> = {
+  CRITICAL: 0,
+  HIGH: 1,
+  MED: 2,
+  LOW: 3,
+};
+
 // Create column definitions function that will be called once inside the component
 const createColumns = (): ColumnDef<ProcessData, any>[] => [
   columnHelper.accessor('level', {
@@ -137,6 +145,13 @@ const createColumns = (): ColumnDef<ProcessData, any>[] => [
           {level}
         </span>
       );
+    },
+    sortingFn: (rowA, rowB) => {
+      const levelA = rowA.getValue('level') as string;
+      const levelB = rowB.getValue('level') as string;
+      const orderA = levelOrder[levelA] ?? 999;
+      const orderB = levelOrder[levelB] ?? 999;
+      return orderA - orderB;
     },
     meta: {
       width: columnWidths.level,
@@ -302,83 +317,80 @@ export function ProcessTable({ processes }: ProcessTableProps) {
   return (
     <>
       <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full table-fixed">
-            <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10">
-              {table.getHeaderGroups().map((headerGroup) => (
-                <tr key={headerGroup.id}>
-                  {headerGroup.headers.map((header) => (
-                    <th
-                      key={header.id}
-                      className={clsx(
-                        "px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-750",
-                        header.column.columnDef.meta?.width
-                      )}
-                      onClick={header.column.getToggleSortingHandler()}
-                    >
-                      <div className="flex items-center gap-1">
-                        {flexRender(
-                          header.column.columnDef.header,
-                          header.getContext()
-                        )}
-                        {{
-                          asc: <ChevronUp className="w-3 h-3" />,
-                          desc: <ChevronDown className="w-3 h-3" />,
-                        }[header.column.getIsSorted() as string] ?? null}
-                      </div>
-                    </th>
-                  ))}
-                </tr>
-              ))}
-            </thead>
-          </table>
-        </div>
-
         {processes.length === 0 ? (
           <div className="p-8 text-center text-gray-500 dark:text-gray-400">
             No processes found
           </div>
         ) : (
-          <div
-            ref={tableContainerRef}
-            className="overflow-auto"
-            style={{ height: '600px' }}
-          >
-            <div style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }}>
-              <table className="w-full table-fixed">
-                <tbody>
-                  {virtualItems.map((virtualRow) => {
-                    const row = rows[virtualRow.index];
-                    return (
-                      <tr
-                        key={row.id}
-                        className="hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer transition-colors border-b border-gray-200 dark:border-gray-800"
-                        onClick={() => setSelectedProcess(row.original)}
-                        style={{
-                          position: 'absolute',
-                          top: 0,
-                          left: 0,
-                          width: '100%',
-                          height: `${virtualRow.size}px`,
-                          transform: `translateY(${virtualRow.start}px)`,
-                        }}
-                      >
-                        {row.getVisibleCells().map((cell) => (
-                          <td
-                            key={cell.id}
+          <div className="overflow-x-auto">
+            <div className="inline-block min-w-full align-middle">
+              <div
+                ref={tableContainerRef}
+                className="overflow-auto"
+                style={{ height: '600px' }}
+              >
+                <table className="w-full table-fixed">
+                  <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10">
+                    {table.getHeaderGroups().map((headerGroup) => (
+                      <tr key={headerGroup.id}>
+                        {headerGroup.headers.map((header) => (
+                          <th
+                            key={header.id}
                             className={clsx(
-                              "px-4 py-3 text-sm whitespace-nowrap",
-                              cell.column.columnDef.meta?.width
+                              "px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-750",
+                              header.column.columnDef.meta?.width
                             )}
+                            onClick={header.column.getToggleSortingHandler()}
                           >
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                          </td>
+                            <div className="flex items-center gap-1">
+                              {flexRender(
+                                header.column.columnDef.header,
+                                header.getContext()
+                              )}
+                              {{
+                                asc: <ChevronUp className="w-3 h-3" />,
+                                desc: <ChevronDown className="w-3 h-3" />,
+                              }[header.column.getIsSorted() as string] ?? null}
+                            </div>
+                          </th>
                         ))}
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                    ))}
+                  </thead>
+                  <tbody style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }}>
+                    {virtualItems.map((virtualRow) => {
+                      const row = rows[virtualRow.index];
+                      return (
+                        <tr
+                          key={row.id}
+                          className="hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer transition-colors border-b border-gray-200 dark:border-gray-800"
+                          onClick={() => setSelectedProcess(row.original)}
+                          style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            width: '100%',
+                            height: `${virtualRow.size}px`,
+                            transform: `translateY(${virtualRow.start}px)`,
+                          }}
+                        >
+                          {row.getVisibleCells().map((cell) => (
+                            <td
+                              key={cell.id}
+                              className={clsx(
+                                "px-4 py-3 text-sm whitespace-nowrap",
+                                cell.column.columnDef.meta?.width
+                              )}
+                            >
+                              {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                            </td>
+                          ))}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}
