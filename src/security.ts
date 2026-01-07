@@ -71,11 +71,18 @@ export async function analyzeSecurity(
 
   // HIGH: Processes spawned from browsers/documents that monitor input
   if (hasInputMonitoring && parentProc) {
-    const suspiciousParents = ['safari', 'chrome', 'firefox', 'edge', 'word', 'excel', 'powerpoint', 'preview'];
-    const isSuspiciousParent = suspiciousParents.some(parent => 
+    const suspiciousParents = [
+      'safari', 'chrome', 'firefox', 'edge', 'brave', 'opera', 'vivaldi', // browsers
+      'word', 'excel', 'powerpoint', 'preview', 'pages', 'numbers', 'keynote', // office/docs
+      'mail', 'outlook', 'thunderbird', // email clients
+      'adobe', 'acrobat', 'skim', // PDF readers
+      'vlc', 'quicktime', 'iina', 'mpv', // media players
+      'unarchiver', 'keka', 'betterzip' // archive utilities
+    ];
+    const isSuspiciousParent = suspiciousParents.some(parent =>
       (parentProc.name || '').toLowerCase().includes(parent)
     );
-    
+
     if (isSuspiciousParent) {
       reasons.push('browser-spawned-input-monitor');
       if (level !== 'CRITICAL') level = 'HIGH';
@@ -180,7 +187,7 @@ export async function analyzeSecurity(
   if (proc.execPath) {
     const homeDir = os.homedir();
     const execPath = proc.execPath.replace('~', homeDir);
-    
+
     for (const location of SUSPICIOUS_LOCATIONS) {
       const checkPath = location.replace('~', homeDir);
       if (execPath.startsWith(checkPath)) {
@@ -188,6 +195,12 @@ export async function analyzeSecurity(
         level = level === 'LOW' ? 'MED' : level;
         break;
       }
+    }
+
+    // Check for hidden directories in path (e.g., /path/to/.hidden/binary)
+    if (/\/\.[^/]+\//.test(execPath)) {
+      reasons.push('hidden-directory-path');
+      level = level === 'LOW' ? 'MED' : level;
     }
   }
 
@@ -223,18 +236,76 @@ export async function analyzeSecurity(
 
   // Check for process injection patterns (parent-child analysis)
   if (parentProc) {
-    // Check if a browser spawned a shell
-    if ((parentProc.name || '').match(/Chrome|Safari|Firefox|Edge/i) && 
-        (proc.name || '').match(/bash|sh|zsh|python|perl|ruby|node/i)) {
-      reasons.push('browser-spawned-shell');
-      level = 'HIGH';
-    }
+    const parentName = (parentProc.name || '').toLowerCase();
+    const procName = (proc.name || '').toLowerCase();
 
-    // Check if a document viewer spawned a process
-    if ((parentProc.name || '').match(/Preview|Adobe|Word|Excel|PowerPoint/i) &&
-        (proc.name || '').match(/bash|sh|curl|wget|nc/i)) {
-      reasons.push('document-spawned-process');
-      level = 'CRITICAL';
+    // Define suspicious parent categories with their patterns
+    const suspiciousParentPatterns = {
+      // Email clients - critical if spawning shells/scripts (malicious attachments)
+      emailClients: {
+        patterns: ['mail', 'outlook', 'thunderbird', 'postbox', 'airmail', 'mailmate', 'spark'],
+        dangerousChildren: /bash|sh|zsh|python|perl|ruby|node|curl|wget|nc|osascript/i,
+        reason: 'email-client-spawned-shell',
+        severity: 'CRITICAL' as SuspicionLevel
+      },
+
+      // PDF readers - critical if spawning shells/scripts (PDF exploits)
+      pdfReaders: {
+        patterns: ['preview', 'adobe', 'acrobat', 'skim', 'pdf expert', 'pdfpen', 'foxit'],
+        dangerousChildren: /bash|sh|zsh|python|perl|ruby|node|curl|wget|nc|osascript/i,
+        reason: 'pdf-reader-spawned-shell',
+        severity: 'CRITICAL' as SuspicionLevel
+      },
+
+      // Browsers - high severity for shell spawning
+      browsers: {
+        patterns: ['chrome', 'safari', 'firefox', 'edge', 'brave', 'opera', 'vivaldi'],
+        dangerousChildren: /bash|sh|zsh|python|perl|ruby|node/i,
+        reason: 'browser-spawned-shell',
+        severity: 'HIGH' as SuspicionLevel
+      },
+
+      // Office document viewers - critical for shell spawning
+      officeApps: {
+        patterns: ['word', 'excel', 'powerpoint', 'pages', 'numbers', 'keynote', 'libreoffice', 'openoffice'],
+        dangerousChildren: /bash|sh|zsh|curl|wget|nc|python|perl|ruby/i,
+        reason: 'document-spawned-process',
+        severity: 'CRITICAL' as SuspicionLevel
+      },
+
+      // Media players - high severity (codec exploits)
+      mediaPlayers: {
+        patterns: ['vlc', 'quicktime', 'iina', 'mpv', 'mplayerx', 'quicktime player'],
+        dangerousChildren: /bash|sh|zsh|python|perl|ruby|curl|wget|nc/i,
+        reason: 'media-player-spawned-shell',
+        severity: 'HIGH' as SuspicionLevel
+      },
+
+      // Archive utilities - high severity (malicious archives)
+      archiveUtils: {
+        patterns: ['archive utility', 'unarchiver', 'keka', 'betterzip', 'stuffit', 'winzip', 'unrar', '7-zip'],
+        dangerousChildren: /bash|sh|zsh|python|perl|ruby|curl|wget|nc/i,
+        reason: 'archive-util-spawned-shell',
+        severity: 'HIGH' as SuspicionLevel
+      }
+    };
+
+    // Check each category
+    for (const [category, config] of Object.entries(suspiciousParentPatterns)) {
+      const isMatchingParent = config.patterns.some(pattern => parentName.includes(pattern));
+      const isDangerousChild = config.dangerousChildren.test(procName) ||
+                               config.dangerousChildren.test(proc.cmd || '');
+
+      if (isMatchingParent && isDangerousChild) {
+        reasons.push(config.reason);
+        // Only upgrade severity, never downgrade
+        if (config.severity === 'CRITICAL') {
+          level = 'CRITICAL';
+        } else if (config.severity === 'HIGH' && level !== 'CRITICAL') {
+          level = 'HIGH';
+        }
+        break; // Found a match, no need to check other categories
+      }
     }
   }
 
@@ -247,6 +318,33 @@ export async function analyzeSecurity(
   // Check for processes with no name but have command
   if (!proc.name && proc.cmd) {
     reasons.push('unnamed-process');
+  }
+
+  // Check for zero-width characters in process names (unicode steganography)
+  if (proc.name) {
+    const zeroWidthChars = /[\u200B-\u200D\uFEFF\u180E\u2060]/;
+    if (zeroWidthChars.test(proc.name)) {
+      reasons.push('zero-width-chars');
+      level = 'HIGH';
+    }
+  }
+
+  // Check for process names mimicking system processes (homoglyph/typosquatting)
+  if (proc.name) {
+    const systemProcesses = [
+      'kernel_task', 'launchd', 'systemd', 'init', 'loginwindow',
+      'WindowServer', 'Finder', 'Dock', 'mds', 'mdworker', 'cfprefsd',
+      'systemstats', 'distnoted', 'configd', 'coreaudiod', 'audiomxd',
+      'UserEventAgent', 'coreservicesd', 'apsd', 'securityd'
+    ];
+
+    for (const sysProc of systemProcesses) {
+      if (proc.name !== sysProc && isSimilarProcessName(proc.name, sysProc)) {
+        reasons.push(`mimicking-system-process:${sysProc}`);
+        level = 'HIGH';
+        break;
+      }
+    }
   }
 
   // Adjust level based on combinations
@@ -263,6 +361,103 @@ export async function analyzeSecurity(
   }
 
   return { level, reasons };
+}
+
+/**
+ * Check if a process name is suspiciously similar to a system process
+ * Detects homoglyph attacks (e.g., 'kerne1_task' vs 'kernel_task')
+ * and typosquatting (e.g., 'kernel-task' vs 'kernel_task')
+ */
+function isSimilarProcessName(procName: string, sysProc: string): boolean {
+  const procLower = procName.toLowerCase();
+  const sysLower = sysProc.toLowerCase();
+
+  // Exact match (already handled by caller, but safety check)
+  if (procLower === sysLower) {
+    return false;
+  }
+
+  // Check for common character substitutions (homoglyphs)
+  const homoglyphs: { [key: string]: string[] } = {
+    'o': ['0', 'ο', 'о'], // letter o, zero, greek omicron, cyrillic o
+    'i': ['1', 'l', 'і', 'ı'], // letter i, one, lowercase L, cyrillic i, dotless i
+    'a': ['а', '@'], // letter a, cyrillic a, at symbol
+    'e': ['е', '3'], // letter e, cyrillic e, number 3
+    's': ['5', '$'], // letter s, number 5, dollar sign
+    'l': ['1', 'i', 'І'], // lowercase L, one, letter i, cyrillic I
+    't': ['7'], // letter t, number 7
+    'g': ['9'], // letter g, number 9
+    'b': ['8'], // letter b, number 8
+  };
+
+  // Create a normalized version of sysProc replacing homoglyphs
+  let normalizedProc = procLower;
+  for (const [original, substitutes] of Object.entries(homoglyphs)) {
+    for (const sub of substitutes) {
+      normalizedProc = normalizedProc.replace(new RegExp(sub, 'g'), original);
+    }
+  }
+
+  if (normalizedProc === sysLower) {
+    return true;
+  }
+
+  // Check for common separators replaced (e.g., kernel-task vs kernel_task)
+  const procNormalized = procLower.replace(/[-_.\s]/g, '');
+  const sysNormalized = sysLower.replace(/[-_.\s]/g, '');
+
+  if (procNormalized === sysNormalized) {
+    return true;
+  }
+
+  // Check for Levenshtein distance of 1-2 characters (typosquatting)
+  const distance = levenshteinDistance(procLower, sysLower);
+  if (distance <= 2 && procLower.length >= 5) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Calculate Levenshtein distance between two strings
+ * Used to detect typosquatting attacks
+ */
+function levenshteinDistance(str1: string, str2: string): number {
+  const len1 = str1.length;
+  const len2 = str2.length;
+  const matrix: number[][] = [];
+
+  // Initialize matrix
+  for (let i = 0; i <= len1; i++) {
+    matrix[i] = [i];
+  }
+  for (let j = 0; j <= len2; j++) {
+    if (matrix[0]) {
+      matrix[0][j] = j;
+    }
+  }
+
+  // Fill matrix
+  for (let i = 1; i <= len1; i++) {
+    for (let j = 1; j <= len2; j++) {
+      const cost = str1[i - 1] === str2[j - 1] ? 0 : 1;
+      const prevRow = matrix[i - 1];
+      const currRow = matrix[i];
+      if (prevRow && currRow) {
+        const deletion = prevRow[j] ?? 0;
+        const insertion = currRow[j - 1] ?? 0;
+        const substitution = prevRow[j - 1] ?? 0;
+        currRow[j] = Math.min(
+          deletion + 1,
+          insertion + 1,
+          substitution + cost
+        );
+      }
+    }
+  }
+
+  return matrix[len1]?.[len2] ?? 0;
 }
 
 export function checkNetworkAnomalies(

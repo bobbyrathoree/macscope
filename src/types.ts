@@ -93,13 +93,19 @@ export const SUSPICIOUS_LOCATIONS = [
   '/tmp',
   '/var/tmp',
   '/dev/shm',
+  '/private/tmp',
   '~/Downloads',
   '~/Desktop',
   '~/.Trash',
   '/Users/Shared',
   '/Library/LaunchAgents',
   '/Library/LaunchDaemons',
-  '~/Library/LaunchAgents'
+  '/Library/StartupItems',
+  '~/Library/LaunchAgents',
+  '~/Library/Application Support',
+  '~/Library/Scripts',
+  '~/.local/bin',
+  '~/.config'
 ] as const;
 
 export const TRUSTED_TEAMS = [

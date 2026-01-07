@@ -2,6 +2,17 @@ import type { FastifyRequest } from 'fastify';
 import type { WebSocket } from 'ws';
 import { processStore } from './store.js';
 
+// Connection limiting to prevent DoS attacks
+const MAX_CONNECTIONS = 100;
+const activeConnections = new Set<WebSocket>();
+
+/**
+ * Get the current number of active WebSocket connections
+ */
+export function getConnectionCount(): number {
+  return activeConnections.size;
+}
+
 interface ProcessRow {
   pid: number;
   ppid?: number;
@@ -66,7 +77,23 @@ function computeDelta(oldProcesses: ProcessRow[], newProcesses: ProcessRow[]): D
 }
 
 export async function websocketHandler(socket: WebSocket, request: FastifyRequest) {
+  // Check connection limit
+  if (activeConnections.size >= MAX_CONNECTIONS) {
+    console.warn(
+      `[WebSocket] Connection rejected: limit reached (${activeConnections.size}/${MAX_CONNECTIONS}) from ${request.ip}`
+    );
+    socket.close(1008, 'Connection limit reached');
+    return;
+  }
+
+  // Add connection to tracking set
+  activeConnections.add(socket);
+  console.log(`[WebSocket] Connection established (${activeConnections.size}/${MAX_CONNECTIONS}) from ${request.ip}`);
+
   let lastSentProcesses: ProcessRow[] = [];
+  let lastResponseTime = Date.now();
+  let heartbeatInterval: NodeJS.Timeout | null = null;
+  let checkAliveInterval: NodeJS.Timeout | null = null;
 
   // Send initial data immediately
   try {
@@ -104,6 +131,26 @@ export async function websocketHandler(socket: WebSocket, request: FastifyReques
     }
   });
 
+  // Heartbeat mechanism: Send ping every 30 seconds
+  heartbeatInterval = setInterval(() => {
+    if (socket.readyState === socket.OPEN) {
+      try {
+        socket.send(JSON.stringify({ type: 'heartbeat' }));
+      } catch (err) {
+        // Socket closed, will be cleaned up
+      }
+    }
+  }, 30000);
+
+  // Check if client is still alive: Close if no response in 35 seconds
+  checkAliveInterval = setInterval(() => {
+    const timeSinceLastResponse = Date.now() - lastResponseTime;
+    if (timeSinceLastResponse > 35000) {
+      console.log('[WebSocket] Client has not responded in 35 seconds, closing connection');
+      socket.close();
+    }
+  }, 5000); // Check every 5 seconds
+
   // Handle client messages
   socket.on('message', (message) => {
     try {
@@ -115,17 +162,37 @@ export async function websocketHandler(socket: WebSocket, request: FastifyReques
             socket.send(JSON.stringify({ type: 'pong' }));
           }
           break;
+        case 'pong':
+          // Update last response time when client responds to heartbeat
+          lastResponseTime = Date.now();
+          break;
       }
     } catch (err) {
       // Ignore message parsing errors
     }
   });
 
-  socket.on('close', () => {
+  // Cleanup function
+  const cleanup = () => {
+    activeConnections.delete(socket);
     unsubscribe();
+    if (heartbeatInterval) {
+      clearInterval(heartbeatInterval);
+      heartbeatInterval = null;
+    }
+    if (checkAliveInterval) {
+      clearInterval(checkAliveInterval);
+      checkAliveInterval = null;
+    }
+  };
+
+  socket.on('close', () => {
+    console.log(`[WebSocket] Connection closed (${activeConnections.size}/${MAX_CONNECTIONS})`);
+    cleanup();
   });
 
   socket.on('error', (err) => {
-    unsubscribe();
+    console.log(`[WebSocket] Connection error (${activeConnections.size}/${MAX_CONNECTIONS}):`, err.message);
+    cleanup();
   });
 }

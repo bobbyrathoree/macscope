@@ -9,8 +9,9 @@ import type { ProcessData } from './types';
 function App() {
   const [processes, setProcesses] = useState<ProcessData[]>([]);
   const [filter, setFilter] = useState('');
+  const [debouncedFilter, setDebouncedFilter] = useState('');
   const [processLimit, setProcessLimit] = useState(200);
-  const [darkMode, setDarkMode] = useState(() => 
+  const [darkMode, setDarkMode] = useState(() =>
     window.matchMedia('(prefers-color-scheme: dark)').matches
   );
   
@@ -59,21 +60,30 @@ function App() {
     }
   }, [darkMode]);
 
+  // Debounce filter input with 300ms delay
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      setDebouncedFilter(filter);
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [filter]);
+
   // Memoize filtered processes with proper order: filter THEN slice
   const filteredProcesses = useMemo(() => {
     // Pre-compute lowercase filter once
-    const lowerFilter = filter.toLowerCase();
+    const lowerFilter = debouncedFilter.toLowerCase();
 
     // Filter first (if filter exists), then slice
     return processes
       .filter(p =>
-        !filter ||
+        !debouncedFilter ||
         (p.name || '').toLowerCase().includes(lowerFilter) ||
         (p.cmd || '').toLowerCase().includes(lowerFilter) ||
         (p.user || '').toLowerCase().includes(lowerFilter)
       )
       .slice(0, processLimit);
-  }, [processes, filter, processLimit]);
+  }, [processes, debouncedFilter, processLimit]);
   
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">

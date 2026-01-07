@@ -19,24 +19,89 @@ const RATE_LIMIT_MAX_ATTEMPTS = 5;
 
 export const processRoutes: FastifyPluginAsync = async (fastify) => {
   // Get all processes
-  fastify.get('/processes', async (request, reply) => {
+  fastify.get<{
+    Querystring: { limit?: number; offset?: number }
+  }>('/processes', {
+    schema: {
+      querystring: {
+        type: 'object',
+        properties: {
+          limit: { type: 'integer', minimum: 1, maximum: 10000 },
+          offset: { type: 'integer', minimum: 0 }
+        }
+      },
+      response: {
+        200: {
+          type: 'array',
+          items: { type: 'object' }
+        }
+      }
+    }
+  }, async (request, reply) => {
     return processStore.getProcesses();
   });
   
   // Get single process
-  fastify.get('/processes/:pid', async (request, reply) => {
-    const { pid } = request.params as { pid: string };
+  fastify.get<{
+    Params: { pid: string }
+  }>('/processes/:pid', {
+    schema: {
+      params: {
+        type: 'object',
+        required: ['pid'],
+        properties: {
+          pid: { type: 'string', pattern: '^[0-9]+$' }
+        }
+      },
+      response: {
+        200: {
+          type: 'object'
+        },
+        404: {
+          type: 'object',
+          properties: {
+            error: { type: 'string' }
+          }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    const { pid } = request.params;
     const process = processStore.getProcess(parseInt(pid));
-    
+
     if (!process) {
       return reply.code(404).send({ error: 'Process not found' });
     }
-    
+
     return process;
   });
   
   // Get system stats
-  fastify.get('/stats', async (request, reply) => {
+  fastify.get('/stats', {
+    schema: {
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            processes: { type: 'object' },
+            system: {
+              type: 'object',
+              properties: {
+                platform: { type: 'string' },
+                arch: { type: 'string' },
+                hostname: { type: 'string' },
+                uptime: { type: 'number' },
+                totalMem: { type: 'number' },
+                freeMem: { type: 'number' },
+                cpuCount: { type: 'number' },
+                isRoot: { type: 'boolean' }
+              }
+            }
+          }
+        }
+      }
+    }
+  }, async (request, reply) => {
     const stats = processStore.getStats();
     const systemInfo = {
       platform: os.platform(),
@@ -48,7 +113,7 @@ export const processRoutes: FastifyPluginAsync = async (fastify) => {
       cpuCount: os.cpus().length,
       isRoot: isRoot()
     };
-    
+
     return {
       processes: stats,
       system: systemInfo
@@ -56,7 +121,24 @@ export const processRoutes: FastifyPluginAsync = async (fastify) => {
   });
   
   // Get MDM status
-  fastify.get('/mdm', async (request, reply) => {
+  fastify.get('/mdm', {
+    schema: {
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            status: { type: 'string' }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            error: { type: 'string' }
+          }
+        }
+      }
+    }
+  }, async (request, reply) => {
     try {
       const mdmStatus = await getMdmSummary();
       return { status: mdmStatus };
@@ -66,9 +148,85 @@ export const processRoutes: FastifyPluginAsync = async (fastify) => {
   });
   
   // Kill a process (requires elevated permissions and authentication)
-  fastify.post('/processes/:pid/kill', async (request, reply) => {
-    const { pid } = request.params as { pid: string };
-    const { signal = 'SIGTERM' } = request.body as { signal?: string };
+  fastify.post<{
+    Params: { pid: string };
+    Body: { signal?: string };
+  }>('/processes/:pid/kill', {
+    schema: {
+      params: {
+        type: 'object',
+        required: ['pid'],
+        properties: {
+          pid: { type: 'string', pattern: '^[0-9]+$' }
+        }
+      },
+      body: {
+        type: 'object',
+        properties: {
+          signal: {
+            type: 'string',
+            enum: ['SIGTERM', 'SIGKILL', 'SIGINT', 'SIGHUP']
+          }
+        }
+      },
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            pid: { type: 'number' },
+            signal: { type: 'string' }
+          }
+        },
+        400: {
+          type: 'object',
+          properties: {
+            error: { type: 'string' },
+            message: { type: 'string' }
+          }
+        },
+        401: {
+          type: 'object',
+          properties: {
+            error: { type: 'string' },
+            message: { type: 'string' }
+          }
+        },
+        403: {
+          type: 'object',
+          properties: {
+            error: { type: 'string' },
+            message: { type: 'string' }
+          }
+        },
+        404: {
+          type: 'object',
+          properties: {
+            error: { type: 'string' },
+            message: { type: 'string' },
+            code: { type: 'string' }
+          }
+        },
+        429: {
+          type: 'object',
+          properties: {
+            error: { type: 'string' },
+            message: { type: 'string' }
+          }
+        },
+        500: {
+          type: 'object',
+          properties: {
+            error: { type: 'string' },
+            message: { type: 'string' },
+            code: { type: 'string' }
+          }
+        }
+      }
+    }
+  }, async (request, reply) => {
+    const { pid } = request.params;
+    const { signal = 'SIGTERM' } = request.body;
 
     // Get client IP
     const clientIp = request.ip || 'unknown';
@@ -121,15 +279,8 @@ export const processRoutes: FastifyPluginAsync = async (fastify) => {
       });
     }
 
-    // 3. Validate PID is a positive integer
+    // 3. Parse PID (validation is already done by schema)
     const pidNum = parseInt(pid);
-    if (isNaN(pidNum) || pidNum <= 0 || !Number.isInteger(Number(pid))) {
-      fastify.log.warn({ clientIp, pid }, 'Invalid PID format');
-      return reply.code(400).send({
-        error: 'Invalid PID',
-        message: 'PID must be a valid positive integer'
-      });
-    }
 
     // 4. Check if PID is protected
     if (PROTECTED_PIDS.includes(pidNum)) {
@@ -140,15 +291,8 @@ export const processRoutes: FastifyPluginAsync = async (fastify) => {
       });
     }
 
-    // 5. Validate signal
+    // 5. Normalize signal (validation is already done by schema)
     const signalUpper = signal.toUpperCase();
-    if (!VALID_SIGNALS.includes(signalUpper)) {
-      fastify.log.warn({ clientIp, signal }, 'Invalid signal');
-      return reply.code(400).send({
-        error: 'Invalid signal',
-        message: `Signal must be one of: ${VALID_SIGNALS.join(', ')}`
-      });
-    }
 
     // 6. Attempt to kill the process
     try {

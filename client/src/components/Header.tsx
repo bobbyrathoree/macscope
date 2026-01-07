@@ -44,6 +44,7 @@ export function Header({ darkMode, onToggleDark, filter, onFilterChange, process
                 value={filter}
                 onChange={(e) => onFilterChange(e.target.value)}
                 className="pl-9 pr-4 py-2 w-64 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                aria-label="Filter processes by name, command, or user"
               />
             </div>
             
