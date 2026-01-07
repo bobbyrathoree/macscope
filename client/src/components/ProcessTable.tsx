@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import {
   createColumnHelper,
   flexRender,
@@ -8,6 +8,7 @@ import {
   SortingState,
   ColumnDef,
 } from '@tanstack/react-table';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { ChevronUp, ChevronDown, AlertTriangle, Shield, Network, Terminal } from 'lucide-react';
 import clsx from 'clsx';
 import type { ProcessData } from '../types';
@@ -224,6 +225,9 @@ export function ProcessTable({ processes }: ProcessTableProps) {
   ]);
   const [selectedProcess, setSelectedProcess] = useState<ProcessData | null>(null);
 
+  // Ref for the scrollable container
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+
   // Memoize columns to prevent recreation on every render
   const columns = useMemo(() => createColumns(), []);
 
@@ -238,13 +242,25 @@ export function ProcessTable({ processes }: ProcessTableProps) {
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
   });
-  
+
+  const rows = table.getRowModel().rows;
+
+  // Set up virtualizer
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => tableContainerRef.current,
+    estimateSize: () => 50,
+    overscan: 10,
+  });
+
+  const virtualItems = virtualizer.getVirtualItems();
+
   return (
     <>
       <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-800 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+            <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10">
               {table.getHeaderGroups().map((headerGroup) => (
                 <tr key={headerGroup.id}>
                   {headerGroup.headers.map((header) => (
@@ -268,34 +284,56 @@ export function ProcessTable({ processes }: ProcessTableProps) {
                 </tr>
               ))}
             </thead>
-            <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
-              {table.getRowModel().rows.map((row) => (
-                <tr
-                  key={row.id}
-                  className="hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer transition-colors"
-                  onClick={() => setSelectedProcess(row.original)}
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <td
-                      key={cell.id}
-                      className="px-4 py-3 text-sm whitespace-nowrap"
-                    >
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
           </table>
         </div>
-        
-        {processes.length === 0 && (
+
+        {processes.length === 0 ? (
           <div className="p-8 text-center text-gray-500 dark:text-gray-400">
             No processes found
           </div>
+        ) : (
+          <div
+            ref={tableContainerRef}
+            className="overflow-auto"
+            style={{ height: '600px' }}
+          >
+            <div style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }}>
+              <table className="w-full">
+                <tbody>
+                  {virtualItems.map((virtualRow) => {
+                    const row = rows[virtualRow.index];
+                    return (
+                      <tr
+                        key={row.id}
+                        className="hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer transition-colors border-b border-gray-200 dark:border-gray-800"
+                        onClick={() => setSelectedProcess(row.original)}
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          width: '100%',
+                          height: `${virtualRow.size}px`,
+                          transform: `translateY(${virtualRow.start}px)`,
+                        }}
+                      >
+                        {row.getVisibleCells().map((cell) => (
+                          <td
+                            key={cell.id}
+                            className="px-4 py-3 text-sm whitespace-nowrap"
+                          >
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          </td>
+                        ))}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
         )}
       </div>
-      
+
       {selectedProcess && (
         <ProcessDetails
           process={selectedProcess}

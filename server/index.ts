@@ -5,21 +5,52 @@ import staticPlugin from '@fastify/static';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { processRoutes } from './routes/processes.js';
-import { websocketHandler } from './websocket.js';
-import { startProcessMonitor, stopProcessMonitor } from './monitor.js';
+import { websocketHandler, setLogger as setWebSocketLogger } from './websocket.js';
+import { startProcessMonitor, stopProcessMonitor, setLogger as setMonitorLogger } from './monitor.js';
+import { setLogger as setStoreLogger } from './store.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+// Configure Pino logger
+const isDevelopment = process.env.NODE_ENV !== 'production';
+const logLevel = process.env.LOG_LEVEL || (isDevelopment ? 'info' : 'warn');
+
+// Try to use pino-pretty in development, fall back to JSON if not available
+const loggerConfig: any = {
+  level: logLevel,
+};
+
+if (isDevelopment) {
+  try {
+    loggerConfig.transport = {
+      target: 'pino-pretty',
+      options: {
+        colorize: true,
+        translateTime: 'HH:MM:ss',
+        ignore: 'pid,hostname',
+      }
+    };
+  } catch (err) {
+    // pino-pretty not available, will use JSON format
+  }
+}
+
 const fastify = Fastify({
-  logger: {
-    level: process.env.NODE_ENV === 'production' ? 'warn' : 'warn'
-  },
+  logger: loggerConfig,
   // Prevent memory leaks and resource exhaustion
   connectionTimeout: 30000,
   keepAliveTimeout: 5000,
   maxParamLength: 1000,
   bodyLimit: 1048576, // 1MB limit
 });
+
+// Export logger for use in other modules
+export const logger = fastify.log;
+
+// Inject logger into other modules
+setMonitorLogger(logger);
+setWebSocketLogger(logger);
+setStoreLogger(logger);
 
 async function start() {
   // Register plugins
@@ -54,13 +85,13 @@ async function start() {
   
   try {
     await fastify.listen({ port, host });
-    console.log(`🚀 Procscope server running at http://localhost:${port}`);
-    console.log(`📡 WebSocket endpoint: ws://localhost:${port}/ws`);
+    fastify.log.info({ port, host }, 'Procscope server running');
+    fastify.log.info({ wsEndpoint: `ws://localhost:${port}/ws` }, 'WebSocket endpoint ready');
     if (process.env.NODE_ENV !== 'production') {
-      console.log(`💻 Start the client with: cd client && npm run dev`);
+      fastify.log.info('Start the client with: cd client && npm run dev');
     }
   } catch (err) {
-    fastify.log.error(err);
+    fastify.log.error(err, 'Failed to start server');
     process.exit(1);
   }
 }
@@ -69,11 +100,11 @@ async function start() {
 const SHUTDOWN_TIMEOUT = 10000; // 10 seconds
 
 async function gracefulShutdown(signal: string) {
-  console.log(`Received ${signal}, shutting down gracefully...`);
+  fastify.log.info({ signal }, 'Received signal, shutting down gracefully');
 
   // Set a timeout to force exit if shutdown takes too long
   const timeoutHandle = setTimeout(() => {
-    console.error('Shutdown timeout exceeded, forcing exit');
+    fastify.log.error({ timeout: SHUTDOWN_TIMEOUT }, 'Shutdown timeout exceeded, forcing exit');
     process.exit(1);
   }, SHUTDOWN_TIMEOUT);
 
@@ -81,21 +112,21 @@ async function gracefulShutdown(signal: string) {
   timeoutHandle.unref();
 
   try {
-    console.log('Stopping new requests...');
+    fastify.log.info('Stopping new requests');
     // First stop accepting new requests
     await fastify.close();
-    console.log('Server closed');
+    fastify.log.info('Server closed');
 
-    console.log('Stopping process monitor...');
+    fastify.log.info('Stopping process monitor');
     // Then stop the process monitor
     stopProcessMonitor();
-    console.log('Process monitor stopped');
+    fastify.log.info('Process monitor stopped');
 
     clearTimeout(timeoutHandle);
-    console.log('Shutdown complete');
+    fastify.log.info('Shutdown complete');
     process.exit(0);
   } catch (err) {
-    console.error('Error during shutdown:', err);
+    fastify.log.error({ err }, 'Error during shutdown');
     clearTimeout(timeoutHandle);
     process.exit(1);
   }
@@ -107,12 +138,12 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 
 // Handle uncaught errors
 process.on('uncaughtException', (err) => {
-  console.error('Uncaught exception:', err);
+  fastify.log.fatal({ err }, 'Uncaught exception');
   gracefulShutdown('uncaughtException');
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled rejection at:', promise, 'reason:', reason);
+  fastify.log.fatal({ reason, promise }, 'Unhandled rejection');
   gracefulShutdown('unhandledRejection');
 });
 

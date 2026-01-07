@@ -163,6 +163,73 @@ export async function analyzeSecurity(
     }
   }
 
+  // BEHAVIORAL DETECTION: Cryptocurrency miners
+  // Detect high CPU usage combined with mining pool network patterns
+  const HIGH_CPU_THRESHOLD = 90;
+  const hasSustainedHighCpu = proc.cpu !== undefined && proc.cpu > HIGH_CPU_THRESHOLD;
+
+  // Known mining pool ports
+  const miningPoolPorts = ['3333', '3334', '4444', '5555', '8888', '14444', '14433'];
+
+  // Mining-related domain keywords
+  const miningDomainKeywords = [
+    'pool', 'mining', 'miner', 'hashvault', 'supportxmr',
+    'nanopool', 'nicehash', 'stratum', 'moneroocean', 'f2pool',
+    'ethermine', 'hiveon', 'antpool', 'slushpool', 'minergate'
+  ];
+
+  // Mining-related command line arguments
+  const miningCmdArgs = [
+    '--algo', '--pool', '--wallet', '-o stratum', '--donate-level',
+    '--user', '--pass', '--cpu-priority', '--threads', '--cpu-affinity',
+    '--randomx', '--cryptonight', '--ethash', '--kawpow'
+  ];
+
+  // Check for mining pool connections
+  let hasMiningPoolConnection = false;
+  if (conn && conn.sampleRemotes && conn.sampleRemotes.size > 0) {
+    const remotesArray = Array.from(conn.sampleRemotes);
+    for (const remote of remotesArray) {
+      const remoteLower = remote.toLowerCase();
+
+      // Check for mining pool ports
+      const port = remote.split(':')[1];
+      if (port && miningPoolPorts.includes(port)) {
+        hasMiningPoolConnection = true;
+        break;
+      }
+
+      // Check for mining-related domains
+      if (miningDomainKeywords.some(keyword => remoteLower.includes(keyword))) {
+        hasMiningPoolConnection = true;
+        break;
+      }
+    }
+  }
+
+  // Check for mining-related command line arguments
+  const hasMiningCmdArgs = miningCmdArgs.some(arg =>
+    cmdLower.includes(arg.toLowerCase())
+  );
+
+  // Detection logic: High CPU + mining pool connection = HIGH threat
+  if (hasSustainedHighCpu && hasMiningPoolConnection) {
+    reasons.push('cryptominer-behavior');
+    level = 'HIGH';
+  } else if (hasMiningPoolConnection && conn && conn.outbound > 0) {
+    // Mining pool connection without high CPU (could be initializing or mining with lower intensity)
+    reasons.push('mining-pool-connection');
+    if (level === 'LOW') level = 'MED';
+  } else if (hasMiningCmdArgs) {
+    // Mining-related command line arguments
+    reasons.push('mining-command-args');
+    if (level === 'LOW') level = 'MED';
+  } else if (hasSustainedHighCpu && conn && conn.outbound > 5) {
+    // High CPU + significant network activity (suspicious but not confirmed mining)
+    reasons.push('high-cpu-with-network');
+    if (level === 'LOW') level = 'MED';
+  }
+
   // Check for data exfiltration tools (only suspicious if not signed by trusted team)
   for (const pattern of SUSPICIOUS_PATTERNS.dataExfiltration) {
     if (cmdLower.includes(pattern) || nameLower.includes(pattern)) {
@@ -482,7 +549,10 @@ export function checkNetworkAnomalies(
   }
 
   // Check for suspicious ports in remote addresses
-  const suspiciousPorts = ['1337', '31337', '4444', '5555', '6666', '6667', '8888'];
+  const suspiciousPorts = [
+    '1337', '31337', '4444', '5555', '6666', '6667', '8888',
+    '3333', '3334', '14444', '14433' // Mining pool ports
+  ];
   for (const remote of conn.sampleRemotes) {
     const port = remote.split(':')[1];
     if (port && suspiciousPorts.includes(port)) {

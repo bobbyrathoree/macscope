@@ -1,6 +1,14 @@
 import type { ProcessWireFormat } from '../shared/types.js';
+import type { FastifyBaseLogger } from 'fastify';
 
 type Subscriber = (processes: ProcessWireFormat[]) => void;
+
+// Logger will be injected from index.ts
+let logger: FastifyBaseLogger | undefined;
+
+export function setLogger(log: FastifyBaseLogger) {
+  logger = log;
+}
 
 interface CachedStats {
   total: number;
@@ -77,6 +85,16 @@ class ProcessStore {
 
       // Update cached stats during the update
       this.cachedStats = this.computeStats(newProcesses);
+
+      if (logger) {
+        logger.debug({
+          processCount: newProcesses.length,
+          critical: this.cachedStats.critical,
+          high: this.cachedStats.high,
+          medium: this.cachedStats.medium,
+          subscribers: this.subscribers.size
+        }, 'Process store updated');
+      }
 
       this.notifySubscribers();
     }

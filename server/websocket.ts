@@ -2,6 +2,14 @@ import type { FastifyRequest } from 'fastify';
 import type { WebSocket } from 'ws';
 import type { ProcessWireFormat, Delta } from '../shared/types.js';
 import { processStore } from './store.js';
+import type { FastifyBaseLogger } from 'fastify';
+
+// Logger will be injected from index.ts
+let logger: FastifyBaseLogger;
+
+export function setLogger(log: FastifyBaseLogger) {
+  logger = log;
+}
 
 // Connection limiting to prevent DoS attacks
 const MAX_CONNECTIONS = 100;
@@ -47,16 +55,22 @@ function computeDelta(oldProcesses: ProcessWireFormat[], newProcesses: ProcessWi
 export async function websocketHandler(socket: WebSocket, request: FastifyRequest) {
   // Check connection limit
   if (activeConnections.size >= MAX_CONNECTIONS) {
-    console.warn(
-      `[WebSocket] Connection rejected: limit reached (${activeConnections.size}/${MAX_CONNECTIONS}) from ${request.ip}`
-    );
+    logger.warn({
+      activeConnections: activeConnections.size,
+      maxConnections: MAX_CONNECTIONS,
+      ip: request.ip
+    }, 'WebSocket connection rejected: limit reached');
     socket.close(1008, 'Connection limit reached');
     return;
   }
 
   // Add connection to tracking set
   activeConnections.add(socket);
-  console.log(`[WebSocket] Connection established (${activeConnections.size}/${MAX_CONNECTIONS}) from ${request.ip}`);
+  logger.info({
+    activeConnections: activeConnections.size,
+    maxConnections: MAX_CONNECTIONS,
+    ip: request.ip
+  }, 'WebSocket connection established');
 
   let lastSentProcesses: ProcessWireFormat[] = [];
   let lastResponseTime = Date.now();
@@ -114,7 +128,10 @@ export async function websocketHandler(socket: WebSocket, request: FastifyReques
   checkAliveInterval = setInterval(() => {
     const timeSinceLastResponse = Date.now() - lastResponseTime;
     if (timeSinceLastResponse > 35000) {
-      console.log('[WebSocket] Client has not responded in 35 seconds, closing connection');
+      logger.warn({
+        timeSinceLastResponse,
+        threshold: 35000
+      }, 'WebSocket client unresponsive, closing connection');
       socket.close();
     }
   }, 5000); // Check every 5 seconds
@@ -155,12 +172,19 @@ export async function websocketHandler(socket: WebSocket, request: FastifyReques
   };
 
   socket.on('close', () => {
-    console.log(`[WebSocket] Connection closed (${activeConnections.size}/${MAX_CONNECTIONS})`);
+    logger.info({
+      activeConnections: activeConnections.size,
+      maxConnections: MAX_CONNECTIONS
+    }, 'WebSocket connection closed');
     cleanup();
   });
 
   socket.on('error', (err) => {
-    console.log(`[WebSocket] Connection error (${activeConnections.size}/${MAX_CONNECTIONS}):`, err.message);
+    logger.error({
+      err,
+      activeConnections: activeConnections.size,
+      maxConnections: MAX_CONNECTIONS
+    }, 'WebSocket connection error');
     cleanup();
   });
 }
