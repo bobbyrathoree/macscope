@@ -13,19 +13,39 @@
 }
 
 @layer components {
+  /* Process Table Grid Layout */
+  .process-table-grid {
+    display: grid;
+    min-width: max-content;
+  }
+
+  /* Column Resizer */
+  .column-resizer {
+    @apply absolute right-0 top-0 h-full w-1 cursor-col-resize
+           bg-transparent hover:bg-blue-500/50 transition-colors z-20;
+  }
+
+  .column-resizer:focus {
+    @apply bg-blue-500/50 outline-none ring-2 ring-blue-500 ring-offset-1;
+  }
+
+  .column-resizer.is-resizing {
+    @apply bg-blue-500/70;
+  }
+
   /* Enhanced animations for security indicators */
   .security-indicator {
     @apply transform transition-all duration-200 ease-in-out;
   }
-  
+
   .security-indicator:hover {
     @apply scale-105 shadow-lg;
   }
-  
+
   .critical-pulse {
     animation: critical-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   }
-  
+
   @keyframes critical-pulse {
     0%, 100% {
       opacity: 1;
